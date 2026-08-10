@@ -1,0 +1,46 @@
+Cómo funciona el flujo completo
+1. Qué necesitás para cada línea de producto
+Dos archivos con el mismo nombre base, distinta extensión:
+
+<línea>.xlsx → el Excel experto que entrega tintometría (crudo, 70 columnas, hoja "FORMULARIO ").
+<línea>.json → un archivo chico que vos (Development) escribís a mano, con los 4 valores que tintometría ya definió para esa línea:
+
+{
+  "clasificacion": "1.-Latex",
+  "producto": "Ltx.Extracubriente Sipa/Ltx.Tecnoconstrucción Sipa/Ltx.Construcolor Sipa/Ltx.Lavable (descontinuado)",
+  "cartilla": "Cartilla Ltx. Extracubriente",
+  "formato": "Galon (3.785 Lts.)"
+}
+Sin ese .json, el sistema omite el Excel con una advertencia (no rompe el resto del lote, pero tampoco genera nada para esa línea).
+
+2. Dónde colocarlos
+Ambos van juntos en data/input/:
+
+
+data/input/
+├── Latex Experto y Homologos.xlsx
+├── Latex Experto y Homologos.json
+├── Esmalte Brillante.xlsx
+├── Esmalte Brillante.json
+└── ... (una línea = un par de archivos)
+El nombre del Excel (sin extensión) define el nombre de "línea de producto" que se usa en todo lo demás: reportes, archivos de salida, auditoría en la base.
+
+Hoy expert.xlsx y expert.json están sueltos en la raíz del proyecto (los dejé ahí porque los pusiste vos y no quise moverlos sin avisar). Si querés que los corra por el flujo oficial, los copio a data/input/ — decime y lo hago.
+
+3. Cómo correrlo
+
+python -m tint_sis.cli run --input data/input --output data/output
+(--input y --output son opcionales, esos son los valores por defecto).
+
+4. Dónde quedan los resultados
+Por cada línea procesada, dos archivos:
+
+
+data/output/
+├── ajuste/
+│   └── Latex Experto y Homologos.xlsx   ← respaldo, Excel nativo, para revisar a mano
+└── Latex Experto y Homologos.txt        ← el archivo final, tab-delimitado, para la máquina CorobLab
+Además queda todo registrado en data/tint_sis.db (SQLite): qué se generó, de qué archivo, cuándo, y cualquier hallazgo de validación (por ejemplo, filas con RGB fuera de rango que quedaron excluidas del .txt).
+
+5. Ciclo cada 15 días
+Cuando llega un Excel nuevo de una línea ya conocida: reemplazás el .xlsx en data/input/ (el .json normalmente no cambia, salvo que tintometría rebautice el producto), corrés el mismo comando, y se regeneran ajuste/<línea>.xlsx y <línea>.txt. Para una línea nueva, agregás el par .xlsx+.json nuevo.

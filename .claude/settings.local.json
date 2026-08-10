@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -m tint_sis.cli run)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\cvidal\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-cvidal-OneDrive---Industrias-Ceresita-S-A-Desktop-TINT-SIS\\\\b113ef75-5530-489b-8116-6c960bd97469\\\\scratchpad\\\\inspect_excels.py\" 2>&1)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\cvidal\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-cvidal-OneDrive---Industrias-Ceresita-S-A-Desktop-TINT-SIS\\\\b113ef75-5530-489b-8116-6c960bd97469\\\\scratchpad\\\\inspect_other_sheets.py\" 2>&1)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\cvidal\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-cvidal-OneDrive---Industrias-Ceresita-S-A-Desktop-TINT-SIS\\\\b113ef75-5530-489b-8116-6c960bd97469\\\\scratchpad\\\\compare_real.py\" 2>&1)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\cvidal\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-cvidal-OneDrive---Industrias-Ceresita-S-A-Desktop-TINT-SIS\\\\b113ef75-5530-489b-8116-6c960bd97469\\\\scratchpad\\\\analyze_clean_pattern.py\" 2>&1)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -m pytest -q 2>&1)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -m pytest -v 2>&1)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\cvidal\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-cvidal-OneDrive---Industrias-Ceresita-S-A-Desktop-TINT-SIS\\\\b113ef75-5530-489b-8116-6c960bd97469\\\\scratchpad\\\\compare_ajuste.py\" 2>&1)"
+    ]
+  }
+}

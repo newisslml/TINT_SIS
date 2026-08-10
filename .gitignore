@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/tint_sis.db
+data/input/*
+data/output/*
+!data/input/.gitkeep
+!data/output/.gitkeep
