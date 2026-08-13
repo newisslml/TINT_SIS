@@ -1,0 +1,182 @@
+# Guía de uso — TINT_SIS
+
+Sistema que toma los archivos expertos que entrega el departamento de tintometría
+cada 15 días y genera los archivos listos para cargar en cada software de máquina
+dispensadora de pintura (CorobLab, y a futuro Fluid, Santint, etc.).
+
+## 1. Requisitos y arranque
+
+El proyecto ya tiene todo instalado en un entorno virtual (`.venv`). Cada vez que
+abras una terminal nueva hay que activarlo antes de correr el sistema.
+
+```powershell
+cd "C:\Users\cvidal\OneDrive - Industrias Ceresita S.A\Desktop\TINT_SIS"
+.venv\Scripts\Activate.ps1
+```
+
+## 2. Correr el sistema
+
+```powershell
+python -m tint_sis.cli run --input data/input --output data/output
+```
+
+- `--input`: carpeta donde van los archivos expertos a procesar (por defecto
+  `data/input`, se puede omitir el flag si no cambiás la carpeta).
+- `--output`: carpeta donde se generan los resultados (por defecto `data/output`).
+- `--db`: ruta de la base SQLite donde queda el historial de cada corrida (por
+  defecto `data/tint_sis.db`). No hace falta tocarlo en el uso normal.
+
+El sistema procesa **todos** los archivos `.xlsx` que encuentre en `--input` en
+una sola corrida, cada uno según el tipo que sea (ver sección 3).
+
+## 3. Los dos tipos de archivo experto que el sistema reconoce
+
+El sistema mira el **nombre del archivo** para decidir cómo procesarlo. Hay dos
+flujos completamente distintos.
+
+### 3.1. Archivo "FORMULARIO" clásico (ej. `expert.xlsx`)
+
+Es el Excel tal como lo arma tintometría internamente: una hoja `FORMULARIO `,
+con filas de colorantes en bloques (COL_1..COL_4) y sin una columna propia de
+Clasificación (viene definida a mano, no en el Excel).
+
+**Cómo agregarlo:**
+
+1. Poné el `.xlsx` en `data/input/` (ej. `latex.xlsx`).
+2. Al lado, con el **mismo nombre** pero extensión `.json`, creá el archivo de
+   metadata (ej. `latex.json`) con los 4 datos que define tintometría para esa
+   línea de producto:
+
+   ```json
+   {
+     "clasificacion": "1.-Latex",
+     "producto": "Ltx.Extracubriente Sipa/Ltx.Tecnoconstrucción Sipa/...",
+     "cartilla": "Cartilla Ltx. Extracubriente",
+     "formato": "Galon (3.785 Lts.)"
+   }
+   ```
+
+   Si falta el `.json`, el sistema **omite el archivo** con una advertencia en
+   vez de romper toda la corrida — revisá la sección "Advertencias de ingesta"
+   que imprime el CLI al terminar.
+
+**Qué genera** (por cada línea de producto, tomando el nombre del `.xlsx` como
+identificador de línea):
+
+| Archivo | Ubicación | Qué es |
+|---|---|---|
+| `filtrado_<linea>.xlsx` | `data/output/ajuste/` | Copia limpia/filtrada, columnas necesarias solamente. Material de respaldo. |
+| `<linea>.txt` | `data/output/` | Archivo final para CorobLab: 20 columnas, tabulado, ISO-8859-1, CRLF. Este es el que se carga en la máquina. |
+
+Antes de generar el `.txt`, cada fila se valida (rangos de R/G/B, campos
+obligatorios, etc.). Las filas con error **no** entran al archivo final — quedan
+listadas en "Hallazgos de validación" al final de la corrida para que las
+revises con tintometría.
+
+### 3.2. Archivo "passthrough" ya en formato final (ej. `expert_MP14_Corob4.1.2.xlsx`)
+
+Son archivos que tintometría/otro sistema ya entrega como tabla plana lista
+(Clasificación, Producto, Cartilla, Formato, Color, R, G, B, Base, colorantes,
+etc. como columnas propias, una fila por fórmula). Acá **no se filtra ni se
+valida nada** — el sistema solo cambia el contenedor al formato que pide la
+máquina.
+
+**Convención de nombre (obligatoria, así el sistema sabe qué hacer con el archivo):**
+
+```
+expert<sufijo opcional>_<GRUPO_DE_TIENDAS>_<MAQUINA>.xlsx
+```
+
+- `expert_MP14_Corob4.1.2.xlsx` ✅
+- `expert1_MP14_Corob4.1.2.xlsx` ✅ (sufijos tipo `1`, `V2`, etc. después de "expert" están permitidos, mientras no lleven guión bajo pegado)
+- `expertMP14Corob4.1.2.xlsx` ❌ (le faltan los guiones bajos separadores)
+
+No necesita ningún `.json` al lado — el grupo y la máquina salen del nombre, y
+Clasificación/Producto/Cartilla/Formato salen directo de las columnas del Excel.
+
+**Qué genera** (mismo nombre base que el archivo de entrada):
+
+| Archivo | Ubicación | Qué es |
+|---|---|---|
+| `<nombre>.csv` | `data/output/` | La tabla completa convertida a CSV en el formato exacto que espera la máquina (separador coma, ISO-8859-1, CRLF). |
+| `<nombre>.xlsx` | `data/output/` | Copia exacta del Excel de entrada. Redundante a propósito: se piden los 2 formatos como entrega para este grupo. |
+
+**Máquinas soportadas hoy:** solo `Corob4.1.2` (case-insensitive) tiene un
+formato de salida registrado. Si el nombre de archivo trae una máquina que
+todavía no está registrada (por ejemplo, cuando lleguen los archivos de MP12,
+Tiendas12 o Tiendas14 con otra máquina), el sistema **no adivina el formato**:
+omite el archivo y avisa en "Advertencias de ingesta" que hay que registrar esa
+máquina. Esto es intencional — cada formato nuevo se valida contra un archivo de
+referencia real antes de programarlo, para no generar un archivo mal formado
+que la máquina rechace.
+
+## 4. Leer el resultado de una corrida
+
+Al terminar, el CLI imprime un resumen:
+
+```
+Formulas leidas: ...
+Formulas generadas: ...
+Formulas con error (excluidas): ...
+Archivos de ajuste (respaldo .xlsx): ...
+Archivos generados (CorobLab .txt): ...
+Archivos generados (CSV, formato completo): ...
+Archivos generados (Excel, formato completo): ...
+
+Advertencias de ingesta:
+  - ...
+
+Hallazgos de validacion:
+  [error] archivo.xlsx fila 123: ...
+```
+
+- **Advertencias de ingesta**: archivos que se saltearon completos (falta
+  metadata, máquina no registrada, etc.).
+- **Hallazgos de validación**: filas puntuales con problemas dentro de un
+  archivo que sí se procesó (solo aplica al flujo FORMULARIO — el passthrough no
+  valida nada).
+
+## 5. Estructura de carpetas
+
+```
+TINT_SIS/
+├── data/
+│   ├── input/            <- poné acá los archivos expertos de cada corrida
+│   ├── output/
+│   │   ├── ajuste/        <- respaldo filtrado (solo flujo FORMULARIO)
+│   │   ├── <linea>.txt        <- salida CorobLab (flujo FORMULARIO)
+│   │   ├── <nombre>.csv       <- salida CSV (flujo passthrough)
+│   │   └── <nombre>.xlsx      <- copia Excel (flujo passthrough)
+│   └── tint_sis.db       <- historial de corridas (SQLite)
+├── src/tint_sis/          <- código del sistema
+└── tests/                 <- pruebas automáticas
+```
+
+## 6. Correr las pruebas automáticas
+
+Antes de confiar en un cambio (o simplemente para chequear que todo sigue
+funcionando), se puede correr la batería de tests:
+
+```powershell
+.venv\Scripts\Activate.ps1
+python -m pytest -q tests
+```
+
+Todas las reglas de formato (columnas, redondeo, fechas, encoding) están
+validadas contra archivos reales entregados por tintometría/Corob — si algo
+falla acá, es una señal real de que un formato cambió.
+
+## 7. Agregar soporte para una máquina/grupo nuevo
+
+Cuando llegue un archivo experto de un grupo nuevo (MP12, Tiendas12, Tiendas14):
+
+1. Definí qué formato de salida necesita esa máquina (CSV, TXT, delimitador,
+   encoding, etc.) y conseguí **un archivo de referencia real** generado por esa
+   máquina para validar contra él — así se trabajó con CorobLab y con
+   Corob4.1.2, sin adivinar el formato.
+2. Si el formato de salida es un CSV plano igual al de Corob4.1.2, alcanza con
+   agregar una línea en `MACHINE_OUTPUT_FORMATS` (`src/tint_sis/routing.py`)
+   mapeando el nombre de la máquina a `"csv_passthrough"`.
+3. Si el formato es distinto (otro delimitador, otras columnas, reglas propias),
+   se arma un adaptador nuevo en `src/tint_sis/adapters/` y se registra en el
+   pipeline, igual que se hizo con `passthrough_csv.py`.

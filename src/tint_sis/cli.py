@@ -35,6 +35,12 @@ def main() -> None:
         print(f"Archivos generados (CorobLab .txt): {len(summary.archivos_generados)}")
         for path in summary.archivos_generados:
             print(f"  - {path}")
+        print(f"Archivos generados (CSV, formato completo): {len(summary.archivos_csv)}")
+        for path in summary.archivos_csv:
+            print(f"  - {path}")
+        print(f"Archivos generados (Excel, formato completo): {len(summary.archivos_excel_passthrough)}")
+        for path in summary.archivos_excel_passthrough:
+            print(f"  - {path}")
 
         if summary.ingestion_warnings:
             print("\nAdvertencias de ingesta:")
