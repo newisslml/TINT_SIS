@@ -73,3 +73,47 @@ def test_pipeline_entrega_csv_y_excel_para_archivo_passthrough(tmp_path):
     assert excel_path.name == "expert_MP14_Corob4.1.2.xlsx"
     assert excel_path.exists()
     assert excel_path.read_bytes() == path.read_bytes()  # copia exacta del original
+
+
+def test_pipeline_filtra_por_homologos_y_no_pasa_por_flujo_clasico(tmp_path):
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+
+    expert_path = input_dir / "expert_test.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["ID", "Clasificacion ", "Producto ", "Color ", "R"])
+    ws.append(["TINT1", "Latex ", "Ltx. Habitacional Ceresita", "azul celeste", 10])
+    ws.append(["TINT2", "Oleos", "Oleo Sintetico Constructor", "blanco", 255])
+    wb.save(expert_path)
+
+    homologos_path = input_dir / "homologos_test.xlsx"
+    wb_h = openpyxl.Workbook()
+    ws_h = wb_h.active
+    ws_h.title = "MP12"
+    ws_h.append(["PRODUCTOS", "TINT_ID", "ID", "CODE", "DESCR", "PATH"])
+    ws_h.append([None, "TINT1", None, "Habitacional Ceresita"])
+    wb_h.save(homologos_path)
+
+    output_dir = tmp_path / "output"
+    db_path = tmp_path / "test.db"
+
+    summary = run_pipeline(input_dir=input_dir, output_dir=output_dir, db_path=db_path)
+
+    # No debe intentar procesarlos como FORMULARIO clasico (sin esto, faltaria
+    # expert_test.json / homologos_test.json y saldria una advertencia de
+    # "falta el archivo de metadata").
+    assert not any("falta el archivo de metadata" in w for w in summary.ingestion_warnings)
+    assert summary.formulas_leidas == 0
+
+    ready_xlsx = output_dir / "MP12_ready.xlsx"
+    ready_csv = output_dir / "MP12_ready.csv"
+    assert ready_xlsx in summary.archivos_excel_passthrough
+    assert ready_csv in summary.archivos_csv
+    assert ready_xlsx.exists()
+    assert ready_csv.exists()
+
+    wb_out = openpyxl.load_workbook(ready_xlsx)
+    rows = list(wb_out.active.iter_rows(values_only=True))
+    assert len(rows) == 2  # encabezado + solo TINT1 (TINT2 no esta en homologos MP12)
+    assert rows[1][0] == "TINT1"

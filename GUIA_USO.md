@@ -110,6 +110,90 @@ máquina. Esto es intencional — cada formato nuevo se valida contra un archivo
 referencia real antes de programarlo, para no generar un archivo mal formado
 que la máquina rechace.
 
+### 3.3. Filtro por Homólogos (archivo maestro + lista de IDs por tienda)
+
+Este flujo resuelve un caso distinto a los dos anteriores: hay **un solo Excel
+maestro** con todas las líneas de producto (Látex, Óleos, Esmaltes, etc.), pero
+cada tienda/grupo (MP12, MP14, Tiendas 12, Tiendas 14) solo usa un subconjunto de
+esos productos. El archivo de Homólogos dice, por cada tienda, qué IDs le
+corresponden; este flujo cruza ambos archivos por ID y genera, para la tienda, un
+Excel y un CSV que contienen **solo** las filas que le corresponden — el resto se
+descarta.
+
+**Ninguno de los dos archivos de entrada se modifica**: se abren en modo lectura,
+se leen como referencia y no se tocan.
+
+**Convención de nombre (obligatoria):**
+
+```
+expert_<SUFIJO>.xlsx
+homologos_<SUFIJO>.xlsx
+```
+
+Ambos archivos deben compartir el mismo `<SUFIJO>` para que el sistema los
+empareje. Ejemplo real usado en las pruebas: `expert_test.xlsx` +
+`homologos_test.xlsx` (sufijo `test`). En un ciclo real podría ser, por ejemplo,
+`expert_2026_09.xlsx` + `homologos_2026_09.xlsx`.
+
+Esta convención es **distinta** a la de la sección 3.2
+(`expert_<GRUPO>_<MAQUINA>.xlsx`, con dos guiones bajos) a propósito: ese archivo
+ya viene pre-filtrado por tienda; este es el maestro completo que hay que
+filtrar. Si un nombre matchea la convención de 3.2, se rutea por ese flujo, no
+por este.
+
+**Cómo tienen que estar armados los archivos:**
+
+- **`expert_<SUFIJO>.xlsx`**: una sola hoja, una fila por fórmula, con la columna
+  `ID` (`TINT1`, `TINT2`, ...) en la primera columna. Esta columna de ID se
+  genera una sola vez con `scripts/add_id_expert_mp14_corob.py` (numeración por
+  posición de fila, no es un código de producto).
+- **`homologos_<SUFIJO>.xlsx`**: una hoja por tienda (`MP12`, `MP14`, `Tiendas
+  12`, `Tiendas 14`). Dentro de cada hoja no importa la estructura exacta (puede
+  tener filas de categoría, encabezados, columnas variables) — el sistema
+  **busca en todas las celdas de la hoja** cualquier valor con forma `TINT###` y
+  arma la lista de IDs de esa tienda con eso. No hace falta que estén en una
+  columna fija.
+
+**Grupos habilitados hoy:** solo **MP12**, en
+`ENABLED_GRUPOS` (`src/tint_sis/adapters/homologos_filter.py`). Si el archivo de
+Homólogos trae otras hojas (MP14, Tiendas 12, Tiendas 14), el sistema las
+reconoce pero **no genera archivo para ellas todavía** — avisa en "Advertencias
+de ingesta" que hay que habilitarlas a mano. Esto es intencional (mismo criterio
+que las máquinas en la sección 3.2): antes de habilitar una tienda nueva hay que
+confirmar que su hoja de Homólogos está completa (sin IDs faltantes) contra el
+archivo experto.
+
+**Qué genera** (por cada tienda habilitada):
+
+| Archivo | Ubicación | Qué es |
+|---|---|---|
+| `<GRUPO>_ready.xlsx` | `data/output/` | Solo las filas del experto cuyo ID está en la hoja de Homólogos de esa tienda. Mismas columnas y formato que el experto. |
+| `<GRUPO>_ready.csv` | `data/output/` | El mismo contenido de `<GRUPO>_ready.xlsx`, convertido a CSV con las mismas reglas de formato validadas en la sección 3.2 (ISO-8859-1, coma, CRLF, redondeo "half up" en las columnas de onzas). |
+
+Cada corrida **sobrescribe** `<GRUPO>_ready.xlsx`/`.csv` — no queda un archivo
+distinto por ciclo, siempre refleja el último cruce hecho.
+
+**Cómo habilitar una tienda nueva (ej. MP14) cuando su hoja de Homólogos esté
+lista:**
+
+1. Confirmá que la hoja de esa tienda en el archivo de Homólogos no tiene IDs
+   faltantes respecto al experto (comparación manual o pedile a Claude que haga
+   el cruce fila por fila, como se hizo para completar MP12).
+2. Agregá el nombre exacto de la hoja (tal como aparece en el Excel, ej.
+   `"MP14"` o `"Tiendas 12"` con el espacio) al set `ENABLED_GRUPOS` en
+   `src/tint_sis/adapters/homologos_filter.py`.
+3. Corré `python -m pytest -q tests` para confirmar que nada se rompió.
+4. Corré el sistema (sección siguiente) — debería generar `MP14_ready.xlsx` /
+   `.csv` sin la advertencia de "grupo no habilitado".
+
+**Riesgo a tener presente:** el ID del experto está asignado por **posición de
+fila**, no por contenido. Si en algún momento se insertan o eliminan filas del
+Excel maestro sin volver a correr `add_id_expert_mp14_corob.py`, la
+correspondencia ID↔producto se puede desalinear. Por eso el archivo maestro real
+trae bloques de filas vacías entre líneas de producto (para dejar espacio a
+agregar productos nuevos sin correr esa numeración de nuevo) — visto y
+confirmado al analizar `expert_MP14_Corob4.1.2.xlsx` real.
+
 ## 4. Leer el resultado de una corrida
 
 Al terminar, el CLI imprime un resumen:
@@ -146,7 +230,9 @@ TINT_SIS/
 │   │   ├── ajuste/        <- respaldo filtrado (solo flujo FORMULARIO)
 │   │   ├── <linea>.txt        <- salida CorobLab (flujo FORMULARIO)
 │   │   ├── <nombre>.csv       <- salida CSV (flujo passthrough)
-│   │   └── <nombre>.xlsx      <- copia Excel (flujo passthrough)
+│   │   ├── <nombre>.xlsx      <- copia Excel (flujo passthrough)
+│   │   ├── <GRUPO>_ready.csv  <- salida CSV (flujo filtro por homologos)
+│   │   └── <GRUPO>_ready.xlsx <- salida Excel filtrada (flujo filtro por homologos)
 │   └── tint_sis.db       <- historial de corridas (SQLite)
 ├── src/tint_sis/          <- código del sistema
 └── tests/                 <- pruebas automáticas

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from tint_sis.canonical.models import Colorante, FormulaCanonica
 from tint_sis.ingestion.linea_metadata import LineaMetadata, load_linea_metadata, sidecar_path_for
-from tint_sis.routing import parse_expert_filename
+from tint_sis.routing import find_homologos_expert_pairs, parse_expert_filename
 
 SHEET_NAME_HINT = "FORMULARIO"
 
@@ -244,12 +244,21 @@ def read_excel_maestro(
 
 
 def read_batch(input_dir: Path) -> IngestResult:
+    input_dir = Path(input_dir)
+    homologos_pairs = find_homologos_expert_pairs(input_dir)
+    homologos_claimed_paths = {p.homologos_path for p in homologos_pairs} | {p.expert_path for p in homologos_pairs}
+
     combined = IngestResult()
-    for path in sorted(Path(input_dir).glob("*.xlsx")):
+    for path in sorted(input_dir.glob("*.xlsx")):
         if parse_expert_filename(path) is not None:
             # expert_<GRUPO>_<MAQUINA>.xlsx: archivo autodescrito (ya trae
             # Clasificacion/Producto/Cartilla/Formato como columnas propias) que se
             # rutea aparte en el pipeline segun la maquina - no pasa por aca.
+            continue
+        if path in homologos_claimed_paths or path.stem.lower().startswith("homologos"):
+            # homologos_<SUFIJO>.xlsx y su expert_<SUFIJO>.xlsx emparejado: se
+            # rutean aparte en el pipeline (filtro por homologos) - no pasan por
+            # el flujo clasico FORMULARIO+metadata.
             continue
         sidecar = sidecar_path_for(path)
         if not sidecar.exists():

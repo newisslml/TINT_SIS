@@ -37,3 +37,39 @@ def parse_expert_filename(path: Path) -> ExpertFileRoute | None:
     maquina = match.group("maquina")
     formato = MACHINE_OUTPUT_FORMATS.get(maquina.lower())
     return ExpertFileRoute(grupo=grupo, maquina=maquina, formato_salida=formato)
+
+
+# Convencion de nombre para el par de archivos del filtro por homologos: el
+# archivo experto maestro (todas las lineas de producto, sin filtrar) y el archivo
+# de homologos (que trae, por cada tienda/grupo, la lista de IDs que le
+# corresponden) se emparejan por compartir el mismo sufijo despues del prefijo,
+# p.ej. "expert_test.xlsx" + "homologos_test.xlsx" (sufijo "test"), o en un ciclo
+# real "expert_2026_09.xlsx" + "homologos_2026_09.xlsx". Se distingue a proposito
+# de expert_<GRUPO>_<MAQUINA>.xlsx (arriba): ese ya viene pre-filtrado por tienda,
+# este es el maestro completo que hay que filtrar.
+HOMOLOGOS_FILENAME_RE = re.compile(r"^homologos_(?P<sufijo>.+)$", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class HomologosExpertPair:
+    sufijo: str
+    expert_path: Path
+    homologos_path: Path
+
+
+def find_homologos_expert_pairs(input_dir: Path) -> list[HomologosExpertPair]:
+    """Busca en input_dir cada homologos_<SUFIJO>.xlsx y lo empareja con su
+    expert_<SUFIJO>.xlsx correspondiente. Si no existe el expert con el mismo
+    sufijo, ese homologos se ignora (se reporta aparte como advertencia por quien
+    llama, aca no se lanza excepcion para no romper el resto del lote)."""
+    input_dir = Path(input_dir)
+    pairs: list[HomologosExpertPair] = []
+    for homologos_path in sorted(input_dir.glob("homologos_*.xlsx")):
+        match = HOMOLOGOS_FILENAME_RE.match(homologos_path.stem)
+        if not match:
+            continue
+        sufijo = match.group("sufijo")
+        expert_path = homologos_path.with_name(f"expert_{sufijo}.xlsx")
+        if expert_path.exists():
+            pairs.append(HomologosExpertPair(sufijo=sufijo, expert_path=expert_path, homologos_path=homologos_path))
+    return pairs

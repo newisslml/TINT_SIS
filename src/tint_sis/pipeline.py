@@ -7,12 +7,13 @@ from pathlib import Path
 
 from tint_sis.adapters.ajuste_expert import write_ajuste_expert_file
 from tint_sis.adapters.coroblab import write_coroblab_file
+from tint_sis.adapters.homologos_filter import run_homologos_filter
 from tint_sis.adapters.passthrough_csv import write_passthrough_csv
 from tint_sis.canonical.models import FormulaCanonica
 from tint_sis.db import repository
 from tint_sis.db.database import DEFAULT_DB_PATH, get_session
 from tint_sis.ingestion.excel_reader import read_batch
-from tint_sis.routing import parse_expert_filename
+from tint_sis.routing import find_homologos_expert_pairs, parse_expert_filename
 from tint_sis.validation.rules import ValidationIssue, validate_batch
 
 
@@ -101,6 +102,19 @@ def run_pipeline(
                 summary.ingestion_warnings.append(
                     f"{path.name}: la maquina '{route.maquina}' no tiene un formato de salida "
                     "registrado (agregar a MACHINE_OUTPUT_FORMATS en routing.py) - se omite"
+                )
+
+        for pair in find_homologos_expert_pairs(input_dir):
+            results, warns = run_homologos_filter(pair.expert_path, pair.homologos_path, output_dir)
+            summary.ingestion_warnings.extend(warns)
+            for result in results:
+                summary.archivos_excel_passthrough.append(result.xlsx_path)
+                repository.record_generated_file(
+                    session, batch, result.grupo, "homologos_filter_xlsx", str(result.xlsx_path)
+                )
+                summary.archivos_csv.append(result.csv_path)
+                repository.record_generated_file(
+                    session, batch, result.grupo, "homologos_filter_csv", str(result.csv_path)
                 )
 
         session.commit()
