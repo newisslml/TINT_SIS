@@ -42,10 +42,13 @@ def main() -> None:
         for path in summary.archivos_excel_passthrough:
             print(f"  - {path}")
 
-        if summary.ingestion_warnings:
-            print("\nAdvertencias de ingesta:")
-            for w in summary.ingestion_warnings:
-                print(f"  - {w}")
+        # Advertencias de ingesta: se siguen juntando en summary.ingestion_warnings
+        # (pipeline.py), solo se deja de imprimir por ahora a pedido del usuario
+        # (ya sabe que faltan habilitar MP14/Tiendas 12/Tiendas 14 en ENABLED_GRUPOS).
+        # if summary.ingestion_warnings:
+        #     print("\nAdvertencias de ingesta:")
+        #     for w in summary.ingestion_warnings:
+        #         print(f"  - {w}")
 
         if summary.issues:
             print("\nHallazgos de validacion:")

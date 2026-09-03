@@ -126,73 +126,77 @@ se leen como referencia y no se tocan.
 **Convención de nombre (obligatoria):**
 
 ```
-expert_<SUFIJO>.xlsx
-homologos_<SUFIJO>.xlsx
+homologos_TINT.xlsx                     <- maestro de homólogos, nombre FIJO
+xData_DATACOMPLETA_<DD_MM_YYYY>.xlsx     <- experto, con la fecha del ciclo
 ```
 
-Ambos archivos deben compartir el mismo `<SUFIJO>` para que el sistema los
-empareje. Ejemplo real usado en las pruebas: `expert_test.xlsx` +
-`homologos_test.xlsx` (sufijo `test`). En un ciclo real podría ser, por ejemplo,
-`expert_2026_09.xlsx` + `homologos_2026_09.xlsx`.
+- El **maestro de homólogos** (`homologos_TINT.xlsx`) **no cambia entre ciclos**:
+  solo se vuelve a tocar cuando entra una línea o un producto nuevo. Es la fuente
+  de verdad de qué `ID_TINT` le corresponde a cada tienda.
+- El **experto** llega cada ~15 días como un archivo nuevo, con la fecha en el
+  nombre (`xData_DATACOMPLETA_03_09_2026.xlsx`). Puede traer cambios respecto al
+  ciclo anterior (fórmulas de color ajustadas, productos eliminados). Si hay
+  varios `xData_DATACOMPLETA_*.xlsx` en la carpeta, el sistema toma **el de fecha
+  más nueva** (por la fecha del nombre; si no la trae, por fecha de archivo).
+
+Regla: cada vez que aparece un `xData_DATACOMPLETA_*.xlsx` nuevo en `data/input/`,
+el sistema lo cruza contra `homologos_TINT.xlsx` y regenera los
+`<grupo>_ready.xlsx` / `.csv`.
 
 Esta convención es **distinta** a la de la sección 3.2
-(`expert_<GRUPO>_<MAQUINA>.xlsx`, con dos guiones bajos) a propósito: ese archivo
-ya viene pre-filtrado por tienda; este es el maestro completo que hay que
-filtrar. Si un nombre matchea la convención de 3.2, se rutea por ese flujo, no
-por este.
+(`expert_<GRUPO>_<MAQUINA>.xlsx`): ese archivo ya viene pre-filtrado por tienda;
+este es el maestro completo que hay que filtrar.
+
+*(Convención vieja, todavía soportada: `expert_<SUFIJO>.xlsx` +
+`homologos_<SUFIJO>.xlsx` compartiendo sufijo, p. ej. `expert_test.xlsx` +
+`homologos_test.xlsx`. Se usa para pruebas; el flujo real es el de arriba.)*
 
 **Cómo tienen que estar armados los archivos:**
 
-- **`expert_<SUFIJO>.xlsx`**: una sola hoja, una fila por fórmula, con la columna
-  `ID` (`TINT1`, `TINT2`, ...) en la primera columna. Esta columna de ID se
-  genera una sola vez con `scripts/add_id_expert_mp14_corob.py` (numeración por
-  posición de fila, no es un código de producto).
-- **`homologos_<SUFIJO>.xlsx`**: una hoja por tienda (`MP12`, `MP14`, `Tiendas
-  12`, `Tiendas 14`). Dentro de cada hoja no importa la estructura exacta (puede
-  tener filas de categoría, encabezados, columnas variables) — el sistema
-  **busca en todas las celdas de la hoja** cualquier valor con forma `TINT###` y
-  arma la lista de IDs de esa tienda con eso. No hace falta que estén en una
-  columna fija.
+- **`xData_DATACOMPLETA_<fecha>.xlsx`**: el sistema lee la hoja llamada
+  **`Formulas`** (si no existe, la primera hoja). Una fila por fórmula, con una
+  columna de ID llamada `ID` o `ID_TINT` (se ubica por encabezado, no tiene que
+  ser la primera). El `ID_TINT` es un código alfanumérico
+  (`LátHab001`, `EsmSCereluxe Aquatech001`, `TexSipalinahidr4233`, ...), no el
+  viejo formato `TINT###`. Las demás hojas del workbook (`ID_new`, etc.) se
+  ignoran.
+- **`homologos_TINT.xlsx`**: una hoja por tienda (`MP12`, `MP14`, `Tiendas 12`,
+  `Tiendas 14`). Cada hoja tiene una columna **`ID_TINT`** (encabezado en su
+  fila; el alias `TINT_ID` también vale) con una fila por ID debajo de cada
+  homólogo. El sistema ubica esa columna por su encabezado y junta todos los
+  valores de texto que hay debajo; las filas de estructura (título, categorías,
+  encabezados de sección, filas de homólogo) dejan esa celda vacía, así que no se
+  cuelan. **No debe tener una hoja `Formulas`** (esa se usó solo para insertar los
+  IDs en cada homólogo y se borra después).
 
-**Grupos habilitados hoy:** solo **MP12**, en
+**Grupos habilitados hoy:** **MP14, MP12, Tiendas 14 y Tiendas 12**, en
 `ENABLED_GRUPOS` (`src/tint_sis/adapters/homologos_filter.py`). Si el archivo de
-Homólogos trae otras hojas (MP14, Tiendas 12, Tiendas 14), el sistema las
-reconoce pero **no genera archivo para ellas todavía** — avisa en "Advertencias
-de ingesta" que hay que habilitarlas a mano. Esto es intencional (mismo criterio
-que las máquinas en la sección 3.2): antes de habilitar una tienda nueva hay que
-confirmar que su hoja de Homólogos está completa (sin IDs faltantes) contra el
-archivo experto.
+Homólogos trae otra hoja que no esté en ese set, el sistema la reconoce pero
+**no genera archivo para ella** — avisa en "Advertencias de ingesta" que hay que
+habilitarla a mano. Antes de habilitar una tienda nueva hay que confirmar que su
+hoja de Homólogos está completa (sin IDs faltantes) contra el experto.
 
 **Qué genera** (por cada tienda habilitada):
 
 | Archivo | Ubicación | Qué es |
 |---|---|---|
-| `<GRUPO>_ready.xlsx` | `data/output/` | Solo las filas del experto cuyo ID está en la hoja de Homólogos de esa tienda. Mismas columnas y formato que el experto. |
-| `<GRUPO>_ready.csv` | `data/output/` | El mismo contenido de `<GRUPO>_ready.xlsx`, convertido a CSV con las mismas reglas de formato validadas en la sección 3.2 (ISO-8859-1, coma, CRLF, redondeo "half up" en las columnas de onzas). |
+| `<GRUPO>_ready.xlsx` | `data/output/` | Solo las filas de la hoja `Formulas` del experto cuyo `ID_TINT` está en la hoja de esa tienda. Mismas columnas y formato que el experto. |
+| `<GRUPO>_ready.csv` | `data/output/` | El mismo contenido de `<GRUPO>_ready.xlsx`, convertido a CSV con las mismas reglas de formato de la sección 3.2 (ISO-8859-1, coma, CRLF). |
 
-Cada corrida **sobrescribe** `<GRUPO>_ready.xlsx`/`.csv` — no queda un archivo
-distinto por ciclo, siempre refleja el último cruce hecho.
+Cada corrida **sobrescribe** `<GRUPO>_ready.xlsx`/`.csv` — siempre reflejan el
+último cruce hecho.
 
-**Cómo habilitar una tienda nueva (ej. MP14) cuando su hoja de Homólogos esté
-lista:**
+**Cómo habilitar una tienda nueva cuando su hoja de Homólogos esté lista:**
 
-1. Confirmá que la hoja de esa tienda en el archivo de Homólogos no tiene IDs
+1. Confirmá que la hoja de esa tienda en `homologos_TINT.xlsx` no tiene IDs
    faltantes respecto al experto (comparación manual o pedile a Claude que haga
-   el cruce fila por fila, como se hizo para completar MP12).
+   el cruce, como se hizo para completar las 4 hojas).
 2. Agregá el nombre exacto de la hoja (tal como aparece en el Excel, ej.
-   `"MP14"` o `"Tiendas 12"` con el espacio) al set `ENABLED_GRUPOS` en
+   `"Tiendas 12"` con el espacio) al set `ENABLED_GRUPOS` en
    `src/tint_sis/adapters/homologos_filter.py`.
 3. Corré `python -m pytest -q tests` para confirmar que nada se rompió.
-4. Corré el sistema (sección siguiente) — debería generar `MP14_ready.xlsx` /
-   `.csv` sin la advertencia de "grupo no habilitado".
-
-**Riesgo a tener presente:** el ID del experto está asignado por **posición de
-fila**, no por contenido. Si en algún momento se insertan o eliminan filas del
-Excel maestro sin volver a correr `add_id_expert_mp14_corob.py`, la
-correspondencia ID↔producto se puede desalinear. Por eso el archivo maestro real
-trae bloques de filas vacías entre líneas de producto (para dejar espacio a
-agregar productos nuevos sin correr esa numeración de nuevo) — visto y
-confirmado al analizar `expert_MP14_Corob4.1.2.xlsx` real.
+4. Corré el sistema — debería generar `<GRUPO>_ready.xlsx` / `.csv` sin la
+   advertencia de "grupo no habilitado".
 
 ## 4. Leer el resultado de una corrida
 

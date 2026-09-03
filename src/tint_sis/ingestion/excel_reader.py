@@ -9,7 +9,11 @@ from pydantic import ValidationError
 
 from tint_sis.canonical.models import Colorante, FormulaCanonica
 from tint_sis.ingestion.linea_metadata import LineaMetadata, load_linea_metadata, sidecar_path_for
-from tint_sis.routing import find_homologos_expert_pairs, parse_expert_filename
+from tint_sis.routing import (
+    find_homologos_expert_pairs,
+    find_homologos_master_pair,
+    parse_expert_filename,
+)
 
 SHEET_NAME_HINT = "FORMULARIO"
 
@@ -245,7 +249,10 @@ def read_excel_maestro(
 
 def read_batch(input_dir: Path) -> IngestResult:
     input_dir = Path(input_dir)
-    homologos_pairs = find_homologos_expert_pairs(input_dir)
+    homologos_pairs = list(find_homologos_expert_pairs(input_dir))
+    master_pair = find_homologos_master_pair(input_dir)
+    if master_pair is not None:
+        homologos_pairs.append(master_pair)
     homologos_claimed_paths = {p.homologos_path for p in homologos_pairs} | {p.expert_path for p in homologos_pairs}
 
     combined = IngestResult()

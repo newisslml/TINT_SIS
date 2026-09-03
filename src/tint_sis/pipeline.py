@@ -13,7 +13,11 @@ from tint_sis.canonical.models import FormulaCanonica
 from tint_sis.db import repository
 from tint_sis.db.database import DEFAULT_DB_PATH, get_session
 from tint_sis.ingestion.excel_reader import read_batch
-from tint_sis.routing import find_homologos_expert_pairs, parse_expert_filename
+from tint_sis.routing import (
+    find_homologos_expert_pairs,
+    find_homologos_master_pair,
+    parse_expert_filename,
+)
 from tint_sis.validation.rules import ValidationIssue, validate_batch
 
 
@@ -104,7 +108,13 @@ def run_pipeline(
                     "registrado (agregar a MACHINE_OUTPUT_FORMATS en routing.py) - se omite"
                 )
 
-        for pair in find_homologos_expert_pairs(input_dir):
+        homologos_pairs = []
+        master_pair = find_homologos_master_pair(input_dir)
+        if master_pair is not None:
+            homologos_pairs.append(master_pair)
+        homologos_pairs.extend(find_homologos_expert_pairs(input_dir))
+
+        for pair in homologos_pairs:
             results, warns = run_homologos_filter(pair.expert_path, pair.homologos_path, output_dir)
             summary.ingestion_warnings.extend(warns)
             for result in results:
