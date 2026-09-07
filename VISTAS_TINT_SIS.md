@@ -13,10 +13,11 @@ en Figma y como referencia para implementarlas después.
   de cada software de máquina, para entregar a los técnicos.
 - El **motor de transformación ya existe y funciona por CLI**. Estas vistas
   reemplazan el uso de terminal, no cambian la lógica.
-- **Multi-software:** hoy TINT_SIS cubre **CorobLab** (`.txt`) y **xData** (CSV
-  filtrado por tienda). Próximo: **SANTINT**; luego Fluid / Tintwise_Lab / Ibicus.
-  Las vistas deben ser **agnósticas del software**: sumar uno = sumar un adaptador
-  y una fila de configuración, **no una pantalla nueva**.
+- **Multi-software:** hoy TINT_SIS cubre **xData** (filtro por homólogos → CSV +
+  Excel filtrado por tienda). Próximo: **SANTINT**; luego Fluid / Tintwise_Lab /
+  Ibicus. *(El piloto CorobLab se usó para validar el patrón hub+adaptadores y ya
+  no está en el sistema.)* Las vistas deben ser **agnósticas del software**: sumar
+  uno = sumar un adaptador y una fila de configuración, **no una pantalla nueva**.
 
 ## Shell / navegación
 
@@ -47,8 +48,8 @@ flowchart TD
 **Objetivo:** estado de un vistazo y entrar a un ciclo nuevo.
 
 **Contenido:**
-- Tarjeta "Último ciclo": fecha, archivo experto usado, nº fórmulas leídas /
-  generadas / con error, nº archivos generados, nº advertencias.
+- Tarjeta "Último ciclo": fecha, archivo experto usado, nº archivos generados
+  (`_ready` por tienda), nº advertencias.
 - Botón primario **Nuevo ciclo**.
 - Accesos rápidos: Resultados del último ciclo, Historial, Configuración.
 - Alertas si falta algo (no hay carpeta de trabajo configurada, no está
@@ -73,11 +74,10 @@ ciclo OK · ciclo con errores.
   | Archivo | Software / destino | Flujo | Estado |
   |---|---|---|---|
 
-  - **Flujo:** FORMULARIO clásico · Passthrough CSV · Filtro por homólogos (xData).
-  - **Estado:** OK · Falta metadata (`.json`) · Máquina no registrada ·
-    Grupo/tienda no habilitada · Nombre no reconocido.
-- Para el flujo homólogos: muestra el `homologos_TINT.xlsx` activo y qué tiendas
-  están habilitadas.
+  - **Flujo:** Filtro por homólogos (xData). *(Único flujo del sistema; queda la
+    columna por si a futuro un software nuevo trae su propio flujo de entrada.)*
+  - **Estado:** OK · Grupo/tienda no habilitada · Nombre no reconocido.
+- Muestra el `homologos_TINT.xlsx` activo y qué tiendas están habilitadas.
 - Botón **Ejecutar** (deshabilitado si hay bloqueantes; opción "ejecutar igual,
   omitiendo los que fallan").
 
@@ -94,8 +94,7 @@ bloqueantes.
 ~10 min con las 4 tiendas).
 
 **Contenido:**
-- Lista de pasos con progreso: por línea de producto (CorobLab) y por tienda
-  (xData: MP14, MP12, Tiendas 14, Tiendas 12).
+- Lista de pasos con progreso: por tienda (MP14, MP12, Tiendas 14, Tiendas 12).
 - Barra global + tiempo transcurrido.
 - Log en vivo (colapsable).
 - Botón **Cancelar**.
@@ -116,7 +115,7 @@ bloqueantes.
   | Salida | Tipo | Filas | Acciones |
   |---|---|---|---|
 
-  - **Tipos:** `.txt` CorobLab · `.csv` · `.xlsx` · `_ready` filtrado.
+  - **Tipos:** `.csv` · `.xlsx` (`_ready` filtrado por tienda).
   - **Acciones:** Abrir · Abrir carpeta · Previsualizar (primeras N filas en
     tabla) · Copiar a carpeta de entrega (si está configurada).
 - Resumen numérico arriba (igual que Inicio).
@@ -129,20 +128,19 @@ por error.
 
 ---
 
-## 5. Advertencias y validación — *v1* (puede ser una sección dentro de Resultados)
+## 5. Advertencias — *v1* (puede ser una sección dentro de Resultados)
 
 **Objetivo:** entender qué quedó afuera y por qué.
 
 **Contenido:**
-- **Advertencias de ingesta:** archivos salteados enteros (falta metadata,
-  máquina no registrada, tienda no habilitada).
-- **Hallazgos de validación:** filas puntuales excluidas (rango R/G/B fuera de
-  límite, campo obligatorio vacío, etc.) — *archivo · fila · mensaje*.
+- **Advertencias de ingesta:** hoja de una tienda no habilitada en
+  `ENABLED_GRUPOS`, hoja sin ningún `ID_TINT`, archivo experto o de homólogos no
+  encontrado con la convención de nombre esperada.
 - Filtro por tipo / archivo. Contador. Exportar a texto.
 
-**Estados:** sin hallazgos (verde) · con advertencias · con errores.
+**Estados:** sin advertencias (verde) · con advertencias.
 
-**Datos:** `summary.ingestion_warnings` + `summary.issues`.
+**Datos:** `summary.ingestion_warnings`.
 
 ---
 
@@ -170,11 +168,10 @@ por error.
 
 **v2 (completo):**
 - **Softwares / máquinas:** nombre, formato de salida, habilitado, carpeta de
-  entrega.
-- Tabla **Familia → prefijo numérico** (CorobLab).
+  entrega (para cuando se sume SANTINT y los siguientes).
 - Nombre esperado del homólogos maestro y patrón del nombre del experto.
 
-Todo lo que hoy vive en código (`ENABLED_GRUPOS`, `MACHINE_OUTPUT_FORMATS`).
+Todo lo que hoy vive en código (`ENABLED_GRUPOS` en `adapters/homologos_filter.py`).
 
 **Datos:** `config.json`.
 

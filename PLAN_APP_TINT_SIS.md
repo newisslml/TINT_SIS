@@ -9,21 +9,21 @@ para empezar. El detalle de pantallas está en `VISTAS_TINT_SIS.md`.
 ## 0. Estado actual del motor
 
 - CLI: `python -m tint_sis.cli run`. Código en `src/tint_sis/`
-  (`pipeline`, `adapters`, `routing`, `db`, `validation`, `ingestion`).
-- Flujos que **ya funcionan y están verificados**:
-  1. **FORMULARIO clásico** → `.txt` CorobLab (piloto, validado contra archivo
-     real).
-  2. **Passthrough CSV** — `expert_<GRUPO>_<MAQUINA>.xlsx`, máquina `Corob4.1.2`
-     → `.csv` + copia `.xlsx`.
-  3. **Filtro por homólogos (xData)** — `homologos_TINT.xlsx` (maestro fijo) +
-     `xData_DATACOMPLETA_<DD_MM_YYYY>.xlsx` (experto por fecha, se toma el más
-     nuevo) → por tienda (MP14 / MP12 / Tiendas 14 / Tiendas 12) un
-     `<grupo>_ready.xlsx` + `<grupo>_ready.csv` (ISO-8859-1, coma, CRLF).
-     Verificado end-to-end: 186.475 / 186.004 / 162.129 / 156.741 filas, 0
-     duplicados, 0 IDs perdidos.
-- Auditoría en `data/tint_sis.db` (SQLite): `batches`, fórmulas, `issues`,
-  archivos generados.
-- Tests: **54 en verde** (`pytest -q`).
+  (`pipeline`, `adapters`, `routing`, `db`).
+- **Único flujo del sistema — Filtro por homólogos (xData)**: `homologos_TINT.xlsx`
+  (maestro fijo) + `xData_DATACOMPLETA_<DD_MM_YYYY>.xlsx` (experto por fecha, se
+  toma el más nuevo) → por tienda (MP14 / MP12 / Tiendas 14 / Tiendas 12) un
+  `<grupo>_ready.xlsx` + `<grupo>_ready.csv` (ISO-8859-1, coma, CRLF).
+  Verificado end-to-end: 186.475 / 186.004 / 162.129 / 156.741 filas, 0
+  duplicados, 0 IDs perdidos.
+  *(El piloto CorobLab — FORMULARIO clásico → `.txt` y el passthrough
+  `expert_<GRUPO>_<MAQUINA>.xlsx` — sirvió para validar el patrón
+  hub+adaptadores y se retiró del repo una vez que xData quedó como flujo real;
+  `canonical/`, `validation/`, `ingestion/` y los adaptadores `coroblab`/
+  `ajuste_expert`/`rows` se eliminaron con él. Ver `plan-tint_sis.md` para el
+  historial.)*
+- Auditoría en `data/tint_sis.db` (SQLite): `batches`, archivos generados.
+- Tests: **26 en verde** (`pytest -q`).
 
 ---
 
@@ -43,7 +43,7 @@ resultados y advertencias, y entregar la GData a los técnicos de máquina.
 | Usuarios | **1 usuario, 1 PC**, offline. |
 | Perfil del usuario | Depto. Desarrollo e Investigación (técnico de dominio; vocabulario de tintometría OK). |
 | Homólogos | **Editables desde la app** (no hace falta abrir Excel). |
-| Multi-software | La app debe servir a **todos** los softwares de máquina. Hoy CorobLab + xData; próximo **SANTINT**; luego Fluid / Tintwise_Lab / Ibicus. |
+| Multi-software | La app debe servir a **todos** los softwares de máquina. Hoy xData; próximo **SANTINT**; luego Fluid / Tintwise_Lab / Ibicus. |
 
 ---
 
@@ -87,9 +87,10 @@ pywebview rinde mejor.
 - Nuevo `src/tint_sis/config.py`: carga `config.json` desde la carpeta de trabajo
   (o `%LOCALAPPDATA%\TINT_SIS\config.json`); **defaults = los valores actuales del
   código**.
-- Migrar a config: `ENABLED_GRUPOS` (`adapters/homologos_filter.py`),
-  `MACHINE_OUTPUT_FORMATS` (`routing.py`), rutas input/output/db, nombre del
-  homólogos maestro y patrón del experto.
+- Migrar a config: `ENABLED_GRUPOS` (`adapters/homologos_filter.py`), rutas
+  input/output/db, nombre del homólogos maestro y patrón del experto. Cuando se
+  sume un software nuevo (SANTINT, etc.), su propio mapeo de formato de salida
+  se suma ahí también.
 - Los módulos leen de config con fallback al default; los tests siguen
   monkeypatcheando.
 
@@ -104,8 +105,8 @@ pywebview rinde mejor.
 - Nueva función `preview_batch(input_dir) -> list[PlannedFile]`: por cada `.xlsx`
   de entrada devuelve `{archivo, software, flujo, estado, detalle}` **sin**
   ejecutar el filtro pesado.
-- Reusa `parse_expert_filename`, `find_homologos_master_pair`, chequeo de
-  sidecars, `ENABLED_GRUPOS`, `MACHINE_OUTPUT_FORMATS`.
+- Reusa `find_homologos_master_pair`/`find_homologos_expert_pairs` y
+  `ENABLED_GRUPOS`.
 - Alimenta la vista "Nuevo ciclo".
 
 ### 5.4 Carpeta de entrega por software/tienda
@@ -138,8 +139,7 @@ Detalle en `VISTAS_TINT_SIS.md`. Hitos:
    completo** (el primero que se va a usar).
 2. Historial + progreso fino + "copiar a entrega".
 3. Editor de Homólogos.
-4. Configuración completa (softwares/máquinas, Familia→prefijo) + preparado para
-   SANTINT.
+4. Configuración completa (softwares/máquinas) + preparado para SANTINT.
 
 ---
 
@@ -147,10 +147,12 @@ Detalle en `VISTAS_TINT_SIS.md`. Hitos:
 
 | Software | Estado | Qué falta |
 |---|---|---|
-| **CorobLab 4.1.2** | ✅ funcionando (`.txt`) | — |
-| **xData** | ✅ funcionando (filtro homólogos → CSV) | consolidarlo como flujo principal en la app; es lo primero que se usará |
-| **SANTINT** | ⏳ próximo | **archivo de referencia real** generado por esa máquina → nuevo `adapters/santint.py` + registro en config. No se adivina el formato (mismo criterio que CorobLab). Se avanza con xData mientras tanto. |
+| **xData** | ✅ funcionando (filtro homólogos → CSV + Excel), único flujo del sistema hoy | consolidarlo como flujo principal en la app; es lo primero que se usará |
+| **SANTINT** | ⏳ próximo | **archivo de referencia real** generado por esa máquina → nuevo `adapters/santint.py` + registro en config. No se adivina el formato sin eso. Se avanza con xData mientras tanto. |
 | Fluid / Tintwise_Lab / Ibicus Spa | pendiente | ídem, cuando se compartan sus formatos |
+
+*(CorobLab 4.1.2 fue el piloto que validó el patrón hub+adaptadores; se retiró
+del sistema una vez que xData quedó funcionando end-to-end — ver §0.)*
 
 **La app no cambia al sumar un software:** es un adaptador + una fila de config +
 (si el formato es nuevo) validación contra su archivo de referencia.
