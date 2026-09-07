@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TINT_SIS</title>
+  <link rel="stylesheet" href="/css/tokens.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+  <div class="shell">
+    <nav class="nav">
+      <div class="nav__brand">TINT_SIS</div>
+      <a class="nav__item" data-route="inicio" href="#/inicio">Inicio</a>
+      <a class="nav__item" data-route="nuevo-ciclo" href="#/nuevo-ciclo">Nuevo ciclo</a>
+      <a class="nav__item" data-route="resultados" href="#/resultados">Resultados</a>
+      <a class="nav__item" data-route="historial" href="#/historial">Historial <span class="tag tag--soon">v2</span></a>
+      <a class="nav__item" data-route="homologos" href="#/homologos">Homólogos <span class="tag tag--soon">v2</span></a>
+      <a class="nav__item" data-route="configuracion" href="#/configuracion">Configuración</a>
+    </nav>
+    <div class="main">
+      <div class="strip" id="strip"></div>
+      <div class="view" id="view"></div>
+    </div>
+  </div>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

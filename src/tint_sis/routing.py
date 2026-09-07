@@ -57,17 +57,20 @@ def _expert_master_sort_key(path: Path) -> tuple:
     return (0, path.stat().st_mtime, 0, 0)
 
 
-def find_homologos_master_pair(input_dir: Path) -> HomologosExpertPair | None:
+def find_homologos_master_pair(
+    input_dir: Path,
+    master_name: str = HOMOLOGOS_MASTER_NAME,
+    expert_glob: str = EXPERT_MASTER_GLOB,
+) -> HomologosExpertPair | None:
     """Empareja el homologos maestro fijo (homologos_TINT.xlsx) con el archivo
     experto mas reciente (xData_DATACOMPLETA*.xlsx). Devuelve None si falta
-    cualquiera de los dos."""
+    cualquiera de los dos. `master_name` / `expert_glob` se pueden pisar desde
+    config."""
     input_dir = Path(input_dir)
-    homologos_path = input_dir / HOMOLOGOS_MASTER_NAME
+    homologos_path = input_dir / master_name
     if not homologos_path.exists():
         return None
-    candidates = [
-        p for p in input_dir.glob(EXPERT_MASTER_GLOB) if p.name != HOMOLOGOS_MASTER_NAME
-    ]
+    candidates = [p for p in input_dir.glob(expert_glob) if p.name != master_name]
     if not candidates:
         return None
     expert_path = max(candidates, key=_expert_master_sort_key)

@@ -114,6 +114,26 @@ def test_filter_expert_by_ids_no_modifica_el_archivo_original(tmp_path, sample_e
     assert sample_expert.read_bytes() == original_bytes
 
 
+def test_filter_expert_by_ids_emite_progreso(tmp_path, sample_expert):
+    eventos = []
+    written = filter_expert_by_ids(
+        sample_expert,
+        {"LatHab001"},
+        tmp_path / "out.xlsx",
+        on_progress=eventos.append,
+        progress_every=1,
+    )
+    assert written == 1
+    filas = [e for e in eventos if "leidas" in e]
+    assert filas, "deberia emitir al menos un evento de progreso de filas"
+    ultimo = filas[-1]
+    assert ultimo["leidas"] == 3  # sample_expert tiene 3 filas de datos
+    assert ultimo["total"] == 3  # openpyxl declara la dimension -> hay total
+    assert ultimo["escritas"] == 1
+    # y un evento avisando que arranca el guardado del xlsx (sin hook posible)
+    assert any(e.get("guardando") for e in eventos)
+
+
 def test_filter_expert_by_ids_usa_la_hoja_formulas(tmp_path):
     # El workbook experto real trae hojas auxiliares antes de "Formulas"
     # (p.ej. "ID_new"); se debe leer "Formulas", no la primera hoja.

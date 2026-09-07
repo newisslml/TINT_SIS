@@ -2,7 +2,9 @@
 
 Este documento lista las pantallas mínimas que necesita la app de escritorio de
 TINT_SIS. Todavía no están diseñadas: sirve como checklist para crear los frames
-en Figma y como referencia para implementarlas después.
+en Figma, como spec para pasarlo a un canvas de diseño (artboard por pantalla,
+con el flujo de la sección "Flujo entre vistas" como navegación entre ellos), y
+como referencia para implementarlas después.
 
 ## Contexto
 
@@ -26,6 +28,23 @@ en Figma y como referencia para implementarlas después.
 - Franja de estado persistente (arriba o abajo): carpeta de trabajo activa,
   fecha del último ciclo, software(s) cubiertos.
 
+## Sistema de diseño (para reusar en cada pantalla)
+
+- **Tamaño de artboard/frame:** fijo, **1440×900** (app de escritorio con
+  ventana propia, no responsive). Las 8 pantallas comparten este tamaño.
+- **Componentes compartidos** (armar una vez, reusar en las 8 pantallas — evita
+  rehacer cada pieza y que un cambio de estilo no se propague):
+  - **Shell base**: el nav lateral + la franja de estado de arriba, ya armados
+    como bloque de fondo de cada pantalla.
+  - **Tabla genérica** con columnas configurables — se reusa en "Nuevo ciclo"
+    (Archivo/Software/Flujo/Estado) y en "Resultados" (Salida/Tipo/Filas/Acciones).
+  - **Tag de estado**, variantes: OK (verde) · Advertencia (ámbar) ·
+    Error/bloqueante (rojo) · Grupo no habilitado (gris).
+  - **Botón primario** y **botón secundario**.
+  - **Barra de progreso** (con % y tiempo transcurrido).
+  - **Card numérica** (para los contadores de "Último ciclo": nº archivos, nº
+    advertencias).
+
 ## Flujo entre vistas
 
 ```mermaid
@@ -33,7 +52,7 @@ flowchart TD
     Inicio --> NuevoCiclo["Nuevo ciclo: cargar y revisar"]
     NuevoCiclo -->|Ejecutar| Ejecucion["Ejecución / progreso"]
     Ejecucion --> Resultados
-    Resultados --> Advertencias["Advertencias y validación"]
+    Resultados --> Advertencias["Advertencias"]
     Resultados -->|Copiar a entrega| Entrega(("carpeta del técnico"))
     Inicio --> Historial
     Historial --> Resultados

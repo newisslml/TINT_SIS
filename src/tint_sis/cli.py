@@ -16,6 +16,7 @@ def main() -> None:
         "run", help="Procesa un ciclo: experto xData + homologos -> archivos filtrados por tienda"
     )
     run_parser.add_argument("--input", default=str(REPO_ROOT / "data" / "input"))
+    # Carpeta base: los finales se guardan en <output>/<software>/ (p.ej. data/output/xData/).
     run_parser.add_argument("--output", default=str(REPO_ROOT / "data" / "output"))
     run_parser.add_argument("--db", default=None)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import datetime
+from collections.abc import Callable
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
@@ -50,13 +51,23 @@ def _format_cell(value: object, is_onzas_column: bool, number_format: str) -> st
     return str(value)
 
 
-def write_passthrough_csv(input_path: Path, output_path: Path) -> int:
+def write_passthrough_csv(
+    input_path: Path,
+    output_path: Path,
+    *,
+    on_progress: Callable[[dict], None] | None = None,
+    total_hint: int | None = None,
+    progress_every: int = 2000,
+) -> int:
     """Convierte un Excel que ya viene en formato final (una fila por formula, con
     Clasificacion/Producto/Cartilla/Formato/... como columnas propias) directo a
     CSV, sin filtrar, limpiar ni validar nada: tintometria ya entrega la tabla
     completa lista para la maquina, aca solo cambia el contenedor (.xlsx -> .csv).
 
     Devuelve la cantidad de filas de datos escritas (sin contar el encabezado).
+
+    `on_progress`, si se pasa, recibe {leidas, total} cada `progress_every` filas;
+    `total_hint` es el total esperado (lo sabe quien llama tras filtrar).
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -64,6 +75,10 @@ def write_passthrough_csv(input_path: Path, output_path: Path) -> int:
 
     wb = openpyxl.load_workbook(input_path, data_only=True, read_only=True)
     ws = wb[wb.sheetnames[0]]
+    total = total_hint
+    if total is None:
+        mr = ws.max_row
+        total = mr - 1 if isinstance(mr, int) and mr > 0 else None
     rows_iter = ws.iter_rows()
 
     header = [c.value for c in next(rows_iter)]
@@ -83,6 +98,11 @@ def write_passthrough_csv(input_path: Path, output_path: Path) -> int:
                 for i, cell in enumerate(row)
             )
             rows_written += 1
+            if on_progress is not None and rows_written % progress_every == 0:
+                on_progress({"leidas": rows_written, "total": total})
+
+    if on_progress is not None:
+        on_progress({"leidas": rows_written, "total": total or rows_written})
 
     wb.close()
     return rows_written

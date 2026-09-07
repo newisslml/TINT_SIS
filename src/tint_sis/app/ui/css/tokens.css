@@ -1,0 +1,30 @@
+/* Design tokens — espejo de la coleccion "TINT_SIS" del Figma. */
+:root {
+  --ink: #1b1f24;
+  --ink-muted: #5b6570;
+  --linea: #e2e4e3;
+  --accent: #1b6e76;
+  --ok: #189936;
+  --advertencia: #b45a00;
+  --error: #c42b2b;
+  --no-habilitado: #6b7280;
+
+  --bg: #dde7ef
+  ;
+  --surface: #ffffff;
+
+  --font-ui: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --nav-w: 220px;
+  --strip-h: 40px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+}

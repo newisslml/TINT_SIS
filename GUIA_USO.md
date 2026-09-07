@@ -27,11 +27,14 @@ python -m tint_sis.cli run --input data/input --output data/output
 
 - `--input`: carpeta donde van el experto y el archivo de Homólogos (por
   defecto `data/input`, se puede omitir el flag si no cambiás la carpeta).
-- `--output`: carpeta donde se generan los resultados (por defecto `data/output`).
+- `--output`: carpeta **base** de salida (por defecto `data/output`). Los archivos
+  finales se guardan ordenados por software: `data/output/xData/<GRUPO>_ready.*`.
+  Cuando se sume otro software (SANTINT, etc.) sus salidas van a
+  `data/output/SANTINT/`.
 - `--db`: ruta de la base SQLite donde queda el historial de cada corrida (por
   defecto `data/tint_sis.db`). No hace falta tocarlo en el uso normal.
 
-**Tarda unos ~10 minutos** con las 4 tiendas habilitadas (el filtro lee el
+**Tarda entre 12 y 15 minutos** con las 4 tiendas habilitadas (el filtro lee el
 experto completo, ~186k filas, una vez por tienda). Mientras corre, la terminal
 imprime `Filtrando Data... (<GRUPO>)` para cada tienda — es normal que no haya
 más salida hasta que termine cada una; no lo cortes con `Ctrl+C` pensando que se
@@ -102,8 +105,11 @@ contra el experto.
 
 | Archivo | Ubicación | Qué es |
 |---|---|---|
-| `<GRUPO>_ready.xlsx` | `data/output/` | Solo las filas de la hoja `Formulas` del experto cuyo `ID_TINT` está en la hoja de esa tienda. Mismas columnas y formato que el experto. |
-| `<GRUPO>_ready.csv` | `data/output/` | El mismo contenido de `<GRUPO>_ready.xlsx`, convertido a CSV (separador coma, ISO-8859-1, CRLF, redondeo "half up" en columnas de cantidad). |
+| `<GRUPO>_ready.xlsx` | `data/output/xData/` | Solo las filas de la hoja `Formulas` del experto cuyo `ID_TINT` está en la hoja de esa tienda. Mismas columnas y formato que el experto. |
+| `<GRUPO>_ready.csv` | `data/output/xData/` | El mismo contenido de `<GRUPO>_ready.xlsx`, convertido a CSV (separador coma, ISO-8859-1, CRLF, redondeo "half up" en columnas de cantidad). |
+
+Los finales se guardan **por software** en `data/output/<software>/` (hoy solo
+`data/output/xData/`) para dejar ordenada la salida cuando se sumen más softwares.
 
 Cada corrida **sobrescribe** `<GRUPO>_ready.xlsx`/`.csv` — siempre reflejan el
 último cruce hecho. Si alguno está abierto en Excel al correr el sistema, falla
@@ -142,8 +148,9 @@ TINT_SIS/
 ├── data/
 │   ├── input/                 <- poné acá homologos_TINT.xlsx y el xData_DATACOMPLETA_*.xlsx del ciclo
 │   ├── output/
-│   │   ├── <GRUPO>_ready.csv  <- salida CSV por tienda
-│   │   └── <GRUPO>_ready.xlsx <- salida Excel filtrada por tienda
+│   │   └── xData/             <- salida final del software xData
+│   │       ├── <GRUPO>_ready.csv  <- salida CSV por tienda
+│   │       └── <GRUPO>_ready.xlsx <- salida Excel filtrada por tienda
 │   └── tint_sis.db            <- historial de corridas (SQLite)
 ├── src/tint_sis/               <- código del sistema
 └── tests/                      <- pruebas automáticas

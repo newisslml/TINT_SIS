@@ -28,8 +28,9 @@ def test_pipeline_filtra_por_homologos_convencion_de_sufijo(tmp_path):
 
     summary = run_pipeline(input_dir=input_dir, output_dir=output_dir, db_path=db_path)
 
-    ready_xlsx = output_dir / "MP12_ready.xlsx"
-    ready_csv = output_dir / "MP12_ready.csv"
+    # los finales se ordenan por software: <output_dir>/xData/
+    ready_xlsx = output_dir / "xData" / "MP12_ready.xlsx"
+    ready_csv = output_dir / "xData" / "MP12_ready.csv"
     assert ready_xlsx in summary.archivos_excel_passthrough
     assert ready_csv in summary.archivos_csv
     assert ready_xlsx.exists()
@@ -72,8 +73,8 @@ def test_pipeline_filtra_por_homologos_maestro_fijo(tmp_path):
 
     summary = run_pipeline(input_dir=input_dir, output_dir=output_dir, db_path=db_path)
 
-    ready_xlsx = output_dir / "MP12_ready.xlsx"
-    ready_csv = output_dir / "MP12_ready.csv"
+    ready_xlsx = output_dir / "xData" / "MP12_ready.xlsx"
+    ready_csv = output_dir / "xData" / "MP12_ready.csv"
     assert ready_xlsx in summary.archivos_excel_passthrough
     assert ready_csv in summary.archivos_csv
     assert ready_xlsx.exists() and ready_csv.exists()

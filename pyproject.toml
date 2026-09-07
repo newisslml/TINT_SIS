@@ -7,5 +7,11 @@ name = "tint_sis"
 version = "0.1.0"
 requires-python = ">=3.12"
 
+[project.optional-dependencies]
+app = ["fastapi>=0.115", "uvicorn>=0.30", "pywebview>=6.0", "python-multipart>=0.0.9"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"tint_sis.app" = ["ui/**/*"]
