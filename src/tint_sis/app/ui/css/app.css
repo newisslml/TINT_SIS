@@ -263,6 +263,14 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   border-color: rgba(255, 255, 255, 0.65);
 }
 .btn--secondary:hover { background: #ffffff; }
+/* mismo morado que el banner informativo del Inicio (.banner--info) */
+.btn--morado {
+  background: rgba(109, 40, 217, 0.92);
+  color: #e7dcff;
+  border-color: #a78bfa;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+.btn--morado:hover { filter: brightness(1.08); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* botón "Ejecutar" de Nuevo ciclo: pegado a la derecha de la fila, ~10px más
@@ -391,7 +399,9 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
 
 /* ---------- progress ---------- */
 .bar { height: 8px; border-radius: 4px; background: var(--linea); overflow: hidden; }
-.bar__fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s linear; }
+.bar__fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s linear, background-color 0.3s linear; }
+/* tienda al 100%: barra en verde para diferenciar la tarea ya completada */
+.bar--done .bar__fill { background: var(--ok); background-image: none; }
 .progress-row { display: grid; grid-template-columns: 90px 1fr 48px; gap: 16px; align-items: center; }
 .store-block { display: flex; flex-direction: column; gap: 6px; }
 .store-block__head { display: flex; justify-content: space-between; align-items: baseline; }

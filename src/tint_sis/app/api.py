@@ -63,6 +63,7 @@ def _last_batch_files(cfg: AppConfig):
                     "tipo": tipo,
                     "filas": _fmt_int(filas) if filas else "-",
                     "existe": ruta.exists(),
+                    "ruta": str(ruta),
                 }
             )
         return {

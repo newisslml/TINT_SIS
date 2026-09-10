@@ -34,7 +34,7 @@ export async function render(view, { navigate }) {
     h(
       "div",
       { class: "row" },
-      btn("Nuevo ciclo", { variant: "primary", onClick: () => navigate("nuevo-ciclo") }),
+      btn("Nuevo ciclo", { variant: "morado", onClick: () => navigate("nuevo-ciclo") }),
       btn("Ver resultados", { onClick: () => navigate("resultados") }),
       btn("Historial", { onClick: () => navigate("historial") }),
       btn("Configuración", { onClick: () => navigate("configuracion") })

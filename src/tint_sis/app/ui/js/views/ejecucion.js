@@ -83,7 +83,9 @@ export async function render(view, { navigate }) {
       row.fill.style.width = `${t.progreso}%`;
       row.pct.textContent = `${t.progreso}%`;
       row.txt.textContent = t.texto || "";
-      row.bar.classList.toggle("bar--working", (t.texto || "").startsWith("guardando"));
+      const completa = t.progreso >= 100;
+      row.bar.classList.toggle("bar--done", completa);
+      row.bar.classList.toggle("bar--working", !completa && (t.texto || "").startsWith("guardando"));
     }
 
     for (let i = logLen; i < (snap.log || []).length; i++) {
@@ -104,7 +106,7 @@ export async function render(view, { navigate }) {
       view.append(
         h(
           "div",
-          { class: "banner banner--advertencia" },
+          { class: "banner banner--info" },
           "Ciclo cancelado. Las tiendas que ya habían terminado quedaron en data/output/xData/; el resto no se generó."
         )
       );

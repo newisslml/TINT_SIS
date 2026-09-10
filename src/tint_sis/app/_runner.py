@@ -246,7 +246,13 @@ def _run(config: AppConfig) -> None:
     grupos: dict[str, list[dict]] = {}
     for gf in summary.archivos:
         grupos.setdefault(gf.grupo, []).append(
-            {"salida": Path(gf.ruta).name, "tipo": gf.tipo, "filas": f"{gf.filas:,}".replace(",", ".")}
+            {
+                "salida": Path(gf.ruta).name,
+                "tipo": gf.tipo,
+                "filas": f"{gf.filas:,}".replace(",", "."),
+                "existe": Path(gf.ruta).exists(),
+                "ruta": str(gf.ruta),
+            }
         )
     filas_totales = sum(gf.filas for gf in summary.archivos if gf.tipo == ".csv")
 
