@@ -1,6 +1,7 @@
 """Rutas HTTP que consume la UI, cableadas al motor real de `tint_sis`."""
 from __future__ import annotations
 
+import datetime
 import os
 import subprocess
 import sys
@@ -23,7 +24,14 @@ def _cfg() -> AppConfig:
 
 
 def _fmt_dt(dt) -> str:
-    return dt.strftime("%Y-%m-%d %H:%M") if dt else "-"
+    """Formatea una fecha de la DB en hora local. `creado_en` / `generado_en` se
+    guardan en UTC (y vuelven naive tras el round-trip por SQLite), así que se les
+    asigna UTC y se convierte a la zona local del equipo antes de mostrar."""
+    if not dt:
+        return "-"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
 def _fmt_int(n: int) -> str:

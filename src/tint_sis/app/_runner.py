@@ -167,6 +167,9 @@ def _on_progress(event: dict) -> None:
             _state.log.append(str(event.get("mensaje") or f"{grupo} listo"))
         elif fase == "fin":
             _state.log.append("Escribiendo _ready por tienda")
+        elif fase == "mensaje":
+            # aviso suelto de post-proceso (p.ej. la variante _cm3), va directo al log
+            _state.log.append(str(event.get("mensaje") or ""))
 
 
 # Reparto del % de cada tienda entre sus 3 sub-etapas. El guardado del .xlsx

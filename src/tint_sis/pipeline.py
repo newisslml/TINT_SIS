@@ -117,8 +117,13 @@ def run_pipeline(
 
                 if result.grupo == CM3_VARIANT_GRUPO:
                     cm3_path = result.xlsx_path.with_name(f"{result.grupo}_cm3.xlsx")
-                    print(f"Generando variante cm3... ({result.grupo})")
+                    msg_ini = f"Generando {cm3_path.name} (colorantes R,T,V,X,Z a cm3)…"
+                    print(msg_ini)
+                    _emit(on_progress, fase="mensaje", mensaje=msg_ini)
                     filas_cm3 = write_cm3_variant(result.xlsx_path, cm3_path)
+                    msg_fin = f"{cm3_path.name} generado ({filas_cm3} filas)"
+                    print(msg_fin)
+                    _emit(on_progress, fase="mensaje", mensaje=msg_fin)
                     summary.archivos_excel_passthrough.append(cm3_path)
                     repository.record_generated_file(
                         session, batch, result.grupo, "colorant_cm3_xlsx", str(cm3_path)
