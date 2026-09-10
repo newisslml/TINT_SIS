@@ -59,9 +59,10 @@ def run_pipeline(
     output_dir = Path(output_dir)
 
     # Los archivos finales se ordenan por software dentro de la carpeta de salida:
-    # <output_dir>/xData/... (por defecto data/output/xData/). Hoy el unico flujo
-    # es xData; cuando entre SANTINT sus salidas van a <output_dir>/SANTINT/.
-    xdata_out = output_dir / "xData"
+    # <output_dir>/Tiendas filtradas/... (por defecto data/output/Tiendas filtradas/).
+    # Hoy el unico flujo es xData; cuando entre SANTINT sus salidas van a
+    # <output_dir>/SANTINT/.
+    xdata_out = output_dir / "Tiendas filtradas"
 
     summary = PipelineSummary()
 

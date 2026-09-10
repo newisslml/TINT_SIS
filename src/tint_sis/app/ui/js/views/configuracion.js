@@ -70,7 +70,7 @@ export async function render(view) {
       h("h2", { class: "section__title" }, "Carpeta de trabajo"),
       rutaRow("input_dir", "Entrada"),
       rutaRow("output_dir", "Salida (base)"),
-      h("p", { class: "muted", style: "font-size:12px;margin:0" }, "Los finales se guardan por software: <salida>/xData/…"),
+      h("p", { class: "muted", style: "font-size:12px;margin:0" }, "Los finales se guardan por software: <salida>/Tiendas filtradas/…"),
       rutaRow("db_path", "Base de datos")
     )
   );

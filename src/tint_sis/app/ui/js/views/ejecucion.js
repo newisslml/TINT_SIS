@@ -107,7 +107,7 @@ export async function render(view, { navigate }) {
         h(
           "div",
           { class: "banner banner--info" },
-          "Ciclo cancelado. Las tiendas que ya habían terminado quedaron en data/output/xData/; el resto no se generó."
+          "Ciclo cancelado. Las tiendas que ya habían terminado quedaron en data/output/Tiendas filtradas/; el resto no se generó."
         )
       );
       footer.replaceChildren(
