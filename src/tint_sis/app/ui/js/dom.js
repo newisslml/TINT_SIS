@@ -49,6 +49,40 @@ export function card(...children) {
   return h("div", { class: "card" }, ...children);
 }
 
+// Modal simple. `acciones` es [{ id, label, variant }]; el primero recibe el foco.
+// Devuelve una promesa con el id elegido, o null si se cierra con Esc / fondo.
+export function modal(texto, acciones = [{ id: "ok", label: "Aceptar", variant: "primary" }]) {
+  return new Promise((resolve) => {
+    const cerrar = (id) => {
+      document.removeEventListener("keydown", onKey);
+      back.remove();
+      resolve(id);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") cerrar(null);
+    };
+    const box = h(
+      "div",
+      { class: "modal__box" },
+      h("div", { class: "modal__text" }, texto),
+      h(
+        "div",
+        { class: "modal__actions" },
+        ...acciones.map((a) => btn(a.label, { variant: a.variant || "secondary", onClick: () => cerrar(a.id) }))
+      )
+    );
+    const back = h(
+      "div",
+      { class: "modal__backdrop", onclick: (e) => e.target === back && cerrar(null) },
+      box
+    );
+    document.addEventListener("keydown", onKey);
+    document.body.append(back);
+    const first = box.querySelector("button");
+    if (first) first.focus();
+  });
+}
+
 export function bar(pct) {
   return h("div", { class: "bar" }, h("div", { class: "bar__fill", style: `width:${pct}%` }));
 }

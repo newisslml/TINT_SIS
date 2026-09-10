@@ -10,7 +10,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from tint_sis.config import AppConfig
-from tint_sis.routing import HOMOLOGOS_FILENAME_RE, find_homologos_master_pair
+from tint_sis.routing import (
+    HOMOLOGOS_FILENAME_RE,
+    expert_master_sort_key,
+    find_homologos_master_pair,
+)
 
 
 @dataclass
@@ -50,8 +54,14 @@ def preview_batch(config: AppConfig) -> BatchPreview:
         return BatchPreview(None, None, sorted(config.enabled_grupos), [], False, bloqueantes)
 
     master_pair = find_homologos_master_pair(input_dir, master_name, expert_glob)
+    # Orden por fecha, mas nuevo arriba: los xData_DATACOMPLETA_<fecha>.xlsx se
+    # ordenan por esa fecha descendente (el que va a usar el ciclo queda primero);
+    # los archivos sin fecha en el nombre (homologos_TINT.xlsx, etc.) quedan
+    # despues, ordenados por mtime descendente entre si.
     xlsx_files = sorted(
-        p for p in input_dir.glob("*.xlsx") if not p.name.startswith("~$")
+        (p for p in input_dir.glob("*.xlsx") if not p.name.startswith("~$")),
+        key=expert_master_sort_key,
+        reverse=True,
     )
 
     for path in xlsx_files:

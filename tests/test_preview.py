@@ -55,6 +55,25 @@ def test_preview_experto_viejo_queda_no_habilitado(tmp_path):
     assert estados["xData_DATACOMPLETA_03_09_2026.xlsx"] == "no-habilitado"
 
 
+def test_preview_ordena_expertos_por_fecha_mas_nuevo_arriba(tmp_path):
+    cfg = _cfg(tmp_path)
+    _xlsx(cfg.input_dir / "homologos_TINT.xlsx", "MP12")
+    # A proposito fuera de orden alfabetico/de creacion: el mas nuevo (18/09) debe
+    # listarse primero, luego 03/09, luego el mas viejo (25/08).
+    _xlsx(cfg.input_dir / "xData_DATACOMPLETA_03_09_2026.xlsx", "Formulas")
+    _xlsx(cfg.input_dir / "xData_DATACOMPLETA_25_08_2026.xlsx", "Formulas")
+    _xlsx(cfg.input_dir / "xData_DATACOMPLETA_18_09_2026.xlsx", "Formulas")
+
+    prev = preview_batch(cfg)
+    orden_expertos = [a.archivo for a in prev.archivos if a.archivo.startswith("xData_")]
+
+    assert orden_expertos == [
+        "xData_DATACOMPLETA_18_09_2026.xlsx",
+        "xData_DATACOMPLETA_03_09_2026.xlsx",
+        "xData_DATACOMPLETA_25_08_2026.xlsx",
+    ]
+
+
 def test_preview_ignora_temporales_de_excel(tmp_path):
     cfg = _cfg(tmp_path)
     _xlsx(cfg.input_dir / "homologos_TINT.xlsx", "MP12")

@@ -50,7 +50,11 @@ def find_homologos_expert_pairs(input_dir: Path) -> list[HomologosExpertPair]:
     return pairs
 
 
-def _expert_master_sort_key(path: Path) -> tuple:
+def expert_master_sort_key(path: Path) -> tuple:
+    """Clave de orden ascendente: los archivos con fecha DD_MM_YYYY en el nombre
+    ordenan por esa fecha (mas nuevo = mayor); los que no traen fecha caen antes
+    que cualquiera con fecha y ordenan entre si por mtime. Se usa con
+    `reverse=True` donde se quiera "el mas nuevo arriba" (preview.py)."""
     match = _EXPERT_DATE_RE.search(path.stem)
     if match:
         return (1, int(match.group("y")), int(match.group("m")), int(match.group("d")))
@@ -73,5 +77,5 @@ def find_homologos_master_pair(
     candidates = [p for p in input_dir.glob(expert_glob) if p.name != master_name]
     if not candidates:
         return None
-    expert_path = max(candidates, key=_expert_master_sort_key)
+    expert_path = max(candidates, key=expert_master_sort_key)
     return HomologosExpertPair(sufijo="TINT", expert_path=expert_path, homologos_path=homologos_path)

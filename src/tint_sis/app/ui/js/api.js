@@ -22,6 +22,8 @@ export const api = {
   inicio: () => req("GET", "/inicio"),
   preview: () => req("GET", "/preview"),
   resultados: () => req("GET", "/resultados"),
+  historial: () => req("GET", "/historial"),
+  reveal: (ruta, modo = "carpeta") => req("POST", "/reveal", { ruta, modo }),
   runStart: () => req("POST", "/run"),
   runCurrent: () => req("GET", "/run/current"),
   runCancel: () => req("POST", "/run/cancel"),

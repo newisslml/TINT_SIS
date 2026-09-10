@@ -8,10 +8,16 @@
   --advertencia: #b45a00;
   --error: #c42b2b;
   --no-habilitado: #6b7280;
+  --info: #7c5cff;
 
-  --bg: #dde7ef
-  ;
+  --bg: #106069;
+  --bg-grad: linear-gradient(155deg, #34b4c0 0%, #17828d 32%, #106069 58%, #06282d 100%);
   --surface: #ffffff;
+
+  /* textos y controles que van sobre el degradado (fuera de tarjetas) */
+  --on-canvas-strong: #ffffff;
+  --on-canvas-soft: #d7f3f6;
+  --on-canvas-link: #9fe6ec;
 
   --font-ui: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;

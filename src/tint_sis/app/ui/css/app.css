@@ -7,10 +7,23 @@ html, body {
   font-size: 14px;
   color: var(--ink);
   background: var(--bg);
+  background-image: var(--bg-grad);
+  background-attachment: fixed;
+  overflow: hidden;
 }
 
 /* ---------- shell ---------- */
-.shell { display: grid; grid-template-columns: var(--nav-w) 1fr; height: 100vh; }
+/* La altura sale de html/body (height:100%), no de 100vh: en el WebView
+   maximizado en pantallas con escalado de Windows, 100vh a veces no coincide
+   con el alto real de la ventana y el contenido de abajo (p. ej. las filas .csv
+   de Resultados) quedaba cortado sin barra de scroll. minmax(0,1fr) deja que la
+   columna de contenido se encoja en vez de desbordar y ser recortada. */
+.shell {
+  display: grid;
+  grid-template-columns: var(--nav-w) minmax(0, 1fr);
+  height: 100%;
+  overflow: hidden;
+}
 
 .nav {
   background: var(--ink);
@@ -18,13 +31,61 @@ html, body {
   display: flex;
   flex-direction: column;
   padding: 20px 0;
+  height: 100%;
+  align-self: start;
+  position: sticky;
+  top: 0;
   overflow-y: auto;
 }
 .nav__brand {
+  position: sticky;
+  top: 0;
+  background: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
   font-size: 16px;
   color: #fff;
   padding: 4px 20px 16px;
+}
+
+/* icono "rainbow" (arcos concéntricos) a la izquierda del título, con trazado animado */
+.rainbow-icon {
+  flex: 0 0 auto;
+  width: 50px;
+  height: 50px;
+  color: #83e9f1;
+  overflow: visible;
+}
+.rainbow-icon__arc {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  /* ciclo de 35s: dibuja en ~1.5s (4.3%) y queda quieto el resto */
+  animation: rainbow-cycle 35s ease-out infinite both;
+}
+.rainbow-icon__arc:nth-of-type(2) { animation-delay: 0.3s; }
+.rainbow-icon__arc:nth-of-type(3) { animation-delay: 0.6s; }
+/* al pasar el mouse se vuelve a dibujar arco por arco (mismo gesto que la versión Motion) */
+.nav__brand:hover .rainbow-icon__arc {
+  animation-name: rainbow-redraw;
+  animation-duration: 1.5s;
+  animation-iteration-count: 1;
+}
+.nav__brand:hover .rainbow-icon__arc:nth-of-type(2) { animation-delay: 0.3s; }
+.nav__brand:hover .rainbow-icon__arc:nth-of-type(3) { animation-delay: 0.6s; }
+
+@keyframes rainbow-cycle {
+  0% { stroke-dashoffset: 1; }
+  4.3% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes rainbow-redraw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rainbow-icon__arc { animation: none !important; stroke-dashoffset: 0; }
 }
 .nav__item {
   display: flex;
@@ -47,7 +108,7 @@ html, body {
 }
 .nav__item .tag--soon { margin-left: auto; }
 
-.main { display: flex; flex-direction: column; min-width: 0; }
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
 
 .strip {
   height: var(--strip-h);
@@ -61,23 +122,53 @@ html, body {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-muted);
+  /* rutas largas sin espacios no deben ensanchar la app: scrollean acá dentro */
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
 }
+.strip > span { flex: 0 0 auto; }
 
 .view {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   overflow-y: auto;
-  padding: 32px 40px;
+  overflow-x: hidden;
+  /* Ancho completo (así la barra de scroll queda pegada al borde de la ventana),
+     pero el contenido se limita a 1180px y se centra: el padding lateral crece
+     de forma simétrica cuando la ventana es más ancha que ese máximo. */
+  padding: 32px max(40px, calc((100% - 1180px) / 2));
   display: flex;
   flex-direction: column;
   gap: 24px;
-  max-width: 1180px;
+  width: 100%;
 }
+/* .view es flex column solo para el gap: los hijos conservan su alto natural
+   (no se comprimen) y el sobrante lo scrollea .view. Sin esto, una tabla con
+   overflow:hidden tiene min-height 0 y el flex le recorta la fila .csv de abajo. */
+.view > * { flex: 0 0 auto; }
 
 /* ---------- typography ---------- */
 h1.view__title { font-size: 26px; line-height: 1.25; margin: 0; font-weight: 600; }
 h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 600; }
 .muted { color: var(--ink-muted); }
 .mono { font-family: var(--font-mono); }
+
+/* Texto suelto sobre el degradado (títulos y párrafos que no viven dentro de una tarjeta):
+   se aclara para contrastar con el fondo cian oscuro. Dentro de .card/.tabla se mantiene el color normal. */
+.view > .view__title,
+.view > .section__title {
+  color: var(--on-canvas-strong);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.view > .muted,
+.view > .soon-view { color: var(--on-canvas-soft); }
+.view > .linklike { color: var(--on-canvas-link); }
+
+/* Fila de contexto de "Nuevo ciclo" (Homólogos activo / Experto / tiendas): también va sobre el degradado */
+.canvas-labels .muted { color: var(--on-canvas-soft); }
+.canvas-labels .mono { color: var(--on-canvas-strong); }
 
 /* ---------- card ---------- */
 .card {
@@ -160,11 +251,118 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   cursor: pointer;
   border: 1px solid transparent;
 }
-.btn--primary { background: var(--accent); color: #fff; }
+.btn--primary {
+  background: #16a7b5;
+  color: #04262b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
 .btn--primary:hover { filter: brightness(1.08); }
-.btn--secondary { background: transparent; color: var(--ink); border-color: var(--linea); }
-.btn--secondary:hover { background: #f0f1f1; }
+.btn--secondary {
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  border-color: rgba(255, 255, 255, 0.65);
+}
+.btn--secondary:hover { background: #ffffff; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* botón "Ejecutar" de Nuevo ciclo: pegado a la derecha de la fila, ~10px más
+   grande y en verde para contrastar con el degradado del fondo */
+.btn--ejecutar {
+  margin-left: auto;
+  padding: 15px 26px;
+  font-size: 15px;
+  background: #1f9d4d;
+  color: #ffffff;
+  border-color: #1f9d4d;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.btn--ejecutar:hover { background: #24b058; filter: brightness(1); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35); }
+.btn--ejecutar .rocket-icon { width: 20px; height: 20px; }
+
+/* Formato "contorno naranjo" sobre tarjeta blanca: botón "Editar" de
+   Configuración (con lápiz) y botones de Historial (sin icono). */
+.btn--edit,
+.btn--naranja {
+  padding: 7px 12px;
+  font-size: 13px;
+  background: #ffffff;
+  color: #b45a00;
+  border-color: #e8730c;
+}
+.btn--edit:hover,
+.btn--naranja:hover { background: #fff4ea; }
+.btn--edit.is-active,
+.btn--naranja.is-active {
+  background: color-mix(in srgb, #e8730c 14%, #fff);
+  border-color: #e8730c;
+  color: #8a4300;
+}
+
+/* botón "Guardar" de Configuración: verde, mismo tono que "Ejecutar" */
+.btn--guardar {
+  background: #1f9d4d;
+  color: #ffffff;
+  border-color: #1f9d4d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+.btn--guardar:hover { background: #24b058; filter: none; }
+.icon-pencil { width: 15px; height: 15px; flex: 0 0 auto; }
+.btn--edit:hover .icon-pencil { animation: pen-write 0.6s ease-in-out; }
+@keyframes pen-write {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(1px, -1px) rotate(-7deg); }
+  75% { transform: translate(-1px, 1px) rotate(7deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn--edit:hover .icon-pencil { animation: none; }
+}
+
+/* rutas de Configuración: se ven igual, pero bloqueadas hasta apretar "Editar" */
+.ruta-input[readonly] {
+  background: #f4f5f5;
+  color: var(--ink-muted);
+  cursor: default;
+}
+.ruta-input.is-editable {
+  background: #ffffff;
+  color: var(--ink);
+}
+.ruta-input.is-editable:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ---------- rocket icon (botón "Ejecutar" de Nuevo ciclo) ---------- */
+.rocket-icon {
+  flex: 0 0 auto;
+  width: 50px;
+  height: 50px;
+  overflow: visible;
+}
+.rocket-icon .rocket-flame { transform-box: fill-box; transform-origin: center; }
+
+/* la nave despega (arriba-derecha y se desvanece), reaparece desde abajo-izquierda
+   y vuelve a su lugar; la llama se estira hacia abajo-izquierda al empujar */
+.btn.is-launching .rocket-icon .rocket-upper { animation: rocket-launch 1.3s ease-in-out both; }
+.btn.is-launching .rocket-icon .rocket-flame { animation: rocket-flame 1.3s ease-in-out both; }
+
+@keyframes rocket-launch {
+  0%   { transform: translate(0, 0); opacity: 1; }
+  44%  { transform: translate(28px, -28px); opacity: 0; }
+  45%  { transform: translate(-28px, 28px); opacity: 0; }
+  100% { transform: translate(0, 0); opacity: 1; }
+}
+@keyframes rocket-flame {
+  0%   { transform: translate(0, 0) scale(1);      opacity: 0.9; }
+  12%  { transform: translate(0, 0) scale(0.8);    opacity: 0.6; }
+  40%  { transform: translate(-12px, 12px) scale(1.2); opacity: 0; }
+  41%  { transform: translate(0, 0) scale(1);      opacity: 0; }
+  100% { transform: translate(0, 0) scale(1);      opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-launching .rocket-icon .rocket-upper,
+  .btn.is-launching .rocket-icon .rocket-flame { animation: none !important; }
+}
 
 /* ---------- table ---------- */
 .tabla {
@@ -173,12 +371,15 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   border-radius: var(--radius);
   overflow: hidden;
 }
+/* sin scroll horizontal propio: las columnas se encogen y el texto baja de
+   línea si hace falta; el alto extra lo absorbe el scroll general de la vista */
 .tabla__head, .tabla__row {
   display: grid;
   gap: 16px;
   padding: 12px 16px;
   align-items: center;
 }
+.tabla__row > * { min-width: 0; overflow-wrap: anywhere; }
 .tabla__head {
   background: #f7f8f8;
   color: var(--ink-muted);
@@ -220,6 +421,9 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
 }
 .banner--advertencia { color: var(--advertencia); background: rgba(180, 90, 0, 0.1); border: 1px solid rgba(180, 90, 0, 0.35); }
 .banner--error { color: var(--error); background: rgba(196, 43, 43, 0.1); border: 1px solid rgba(196, 43, 43, 0.35); }
+/* aviso informativo sobre el degradado cian oscuro del Inicio: morado fuerte de fondo
+   con texto en morado claro para máximo contraste */
+.banner--info { color: #e7dcff; background: rgba(109, 40, 217, 0.92); border: 1px solid #a78bfa; }
 
 .dropzone {
   border: 1px dashed var(--linea);
@@ -239,10 +443,19 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   padding: 4px 10px;
   border-radius: 20px;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--accent);
-  background: rgba(27, 110, 118, 0.1);
-  border: 1px solid rgba(27, 110, 118, 0.4);
+  font-weight: 600;
+  color: #06363c;
+  background: #83e9f1;
+  border: 1px solid #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+/* variante "activo/habilitado" (ej. tiendas habilitadas en Nuevo ciclo): mismo
+   token --ok que .tag--ok, para que el verde de "habilitado" sea consistente
+   en toda la app. */
+.chip--ok {
+  color: #ffffff;
+  background: var(--ok);
+  border-color: var(--ok);
 }
 
 .log {
@@ -262,6 +475,61 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
 
 .checklist { display: flex; flex-direction: column; gap: 8px; }
 .checklist label { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- icono "agregar archivo" (al pie del dropzone de Nuevo ciclo) ---------- */
+.add-file-icon {
+  width: 80px;
+  height: 80px;
+  margin: 12px auto 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.add-file-icon:hover { color: var(--ink); }
+.add-file-icon svg { width: 100%; height: 100%; overflow: visible; }
+.add-file-icon .file-fold,
+.add-file-icon .file-lines { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.add-file-icon.is-drawing .file-fold { animation: file-draw 0.3s ease-out both; }
+.add-file-icon.is-drawing .file-lines { animation: file-draw 0.4s ease-out 0.3s both; }
+@keyframes file-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .add-file-icon.is-drawing .file-fold,
+  .add-file-icon.is-drawing .file-lines { animation: none !important; }
+}
+
+/* ---------- modal ---------- */
+.modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(4, 20, 24, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modal__box {
+  background: var(--surface);
+  border: 1px solid var(--linea);
+  border-radius: var(--radius);
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+.modal__text { font-size: 14px; line-height: 1.4; color: var(--ink); }
+.modal__actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
 
 .soon-view { color: var(--ink-muted); font-size: 14px; }
 .linklike { color: var(--accent); cursor: pointer; text-decoration: underline; background: none; border: none; font: inherit; padding: 0; }

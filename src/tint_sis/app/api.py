@@ -101,7 +101,7 @@ def get_inicio() -> dict:
     if not cfg.delivery_paths:
         alertas.append(
             {
-                "nivel": "advertencia",
+                "nivel": "info",
                 "texto": "No hay carpeta de entrega configurada. Se puede generar igual; "
                 "habra que copiar la GData a los tecnicos a mano.",
             }
@@ -171,6 +171,117 @@ def get_resultados() -> dict:
         ],
         "advertencias": [],
     }
+
+
+@router.get("/historial")
+def get_historial() -> dict:
+    """Lista los ciclos ejecutados (batches en la DB) con sus archivos generados,
+    marcando cuáles siguen disponibles en disco para revisar el backup."""
+    cfg = _cfg()
+    session = get_session(cfg.db_path)
+    try:
+        ciclos = []
+        for batch in repository.list_batches(session, limit=50):
+            registros = repository.files_for_batch(session, batch)
+            grupos: dict[str, list[dict]] = {}
+            filas_totales = 0
+            disponibles = 0
+            carpetas: list[Path] = []
+            carpeta_viva = None
+            for reg in registros:
+                ruta = Path(reg.ruta)
+                existe = ruta.exists()
+                tipo = ".csv" if reg.adaptador.endswith("csv") else ".xlsx"
+                filas = _count_data_rows(ruta) if tipo == ".csv" and existe else 0
+                if existe:
+                    disponibles += 1
+                    if carpeta_viva is None:
+                        carpeta_viva = ruta.parent
+                if tipo == ".csv":
+                    filas_totales += filas
+                if ruta.parent not in carpetas:
+                    carpetas.append(ruta.parent)
+                grupos.setdefault(reg.linea_producto, []).append(
+                    {
+                        "salida": ruta.name,
+                        "tipo": tipo,
+                        "filas": _fmt_int(filas) if filas else "-",
+                        "existe": existe,
+                        "ruta": str(ruta),
+                    }
+                )
+            # carpeta local del backup: la del primer archivo que aún existe, o la
+            # esperada (la del primer registro) si ninguno sigue en disco
+            carpeta = carpeta_viva or (carpetas[0] if carpetas else None)
+            ciclos.append(
+                {
+                    "id": batch.id,
+                    "fecha": _fmt_dt(batch.creado_en),
+                    "origen": batch.origen_dir,
+                    "n_archivos": len(registros),
+                    "n_disponibles": disponibles,
+                    "filas_totales": _fmt_int(filas_totales),
+                    "carpeta": str(carpeta) if carpeta else None,
+                    "carpeta_existe": bool(carpeta and carpeta.is_dir()),
+                    "grupos": [
+                        {"titulo": f"xData → {g}", "salidas": s} for g, s in grupos.items()
+                    ],
+                }
+            )
+        return {"ciclos": ciclos}
+    finally:
+        session.close()
+
+
+def _reveal_roots(cfg: AppConfig) -> list[Path]:
+    """Carpetas bajo las que se permite abrir algo desde la UI: la salida
+    configurada y la carpeta de trabajo (donde viven backups de ciclos viejos)."""
+    roots = []
+    for candidato in (Path(cfg.output_dir), Path(cfg.input_dir).parent):
+        try:
+            resuelto = candidato.resolve()
+        except OSError:
+            continue
+        if resuelto not in roots:
+            roots.append(resuelto)
+    return roots
+
+
+@router.post("/reveal")
+def post_reveal(payload: dict) -> dict:
+    """Abre en el explorador un archivo generado por un ciclo, o la carpeta que lo
+    contiene. Sólo se permiten rutas dentro de la carpeta de salida o de trabajo."""
+    raw = (payload or {}).get("ruta", "")
+    modo = (payload or {}).get("modo", "carpeta")
+    if not raw:
+        raise HTTPException(status_code=400, detail="Falta 'ruta'")
+
+    cfg = _cfg()
+    try:
+        objetivo = Path(raw).resolve()
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Ruta inválida") from exc
+    if not any(objetivo == r or r in objetivo.parents for r in _reveal_roots(cfg)):
+        raise HTTPException(status_code=400, detail="Ruta fuera de la carpeta de trabajo")
+
+    if objetivo.is_dir():
+        destino = objetivo
+    elif modo == "archivo" and objetivo.is_file():
+        destino = objetivo
+    else:
+        destino = objetivo.parent
+    if not destino.exists():
+        raise HTTPException(status_code=404, detail=f"Ya no existe en disco: {destino}")
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(str(destino))  # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(destino)])
+        else:
+            subprocess.Popen(["xdg-open", str(destino)])
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"No se pudo abrir: {exc}") from exc
+    return {"abierto": str(destino)}
 
 
 @router.get("/config")

@@ -10,11 +10,19 @@
 <body>
   <div class="shell">
     <nav class="nav">
-      <div class="nav__brand">TINT_SIS</div>
+      <div class="nav__brand">
+        <svg class="rainbow-icon" viewBox="0 0 24 24" width="22" height="22" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path class="rainbow-icon__arc" pathLength="1" d="M22 17a10 10 0 0 0-20 0" />
+          <path class="rainbow-icon__arc" pathLength="1" d="M6 17a6 6 0 0 1 12 0" />
+          <path class="rainbow-icon__arc" pathLength="1" d="M10 17a2 2 0 0 1 4 0" />
+        </svg>
+        <span>TINT_SIS</span>
+      </div>
       <a class="nav__item" data-route="inicio" href="#/inicio">Inicio</a>
       <a class="nav__item" data-route="nuevo-ciclo" href="#/nuevo-ciclo">Nuevo ciclo</a>
       <a class="nav__item" data-route="resultados" href="#/resultados">Resultados</a>
-      <a class="nav__item" data-route="historial" href="#/historial">Historial <span class="tag tag--soon">v2</span></a>
+      <a class="nav__item" data-route="historial" href="#/historial">Historial</a>
       <a class="nav__item" data-route="homologos" href="#/homologos">Homólogos <span class="tag tag--soon">v2</span></a>
       <a class="nav__item" data-route="configuracion" href="#/configuracion">Configuración</a>
     </nav>

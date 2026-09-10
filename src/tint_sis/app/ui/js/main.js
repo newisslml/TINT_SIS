@@ -4,6 +4,7 @@ import * as inicio from "./views/inicio.js";
 import * as nuevoCiclo from "./views/nuevo_ciclo.js";
 import * as ejecucion from "./views/ejecucion.js";
 import * as resultados from "./views/resultados.js";
+import * as historial from "./views/historial.js";
 import * as configuracion from "./views/configuracion.js";
 
 const ROUTES = {
@@ -11,8 +12,8 @@ const ROUTES = {
   "nuevo-ciclo": nuevoCiclo,
   ejecucion,
   resultados,
+  historial,
   configuracion,
-  historial: soon("Historial", "Auditoría y re-descarga de corridas anteriores. Llega en la v2."),
   homologos: soon("Homólogos (editor)", "Editar qué ID_TINT lleva cada tienda sin abrir Excel. Llega en la v2."),
   advertencias: soon("Advertencias", "Qué quedó afuera del ciclo y por qué. En la v1 puede vivir dentro de Resultados."),
 };
