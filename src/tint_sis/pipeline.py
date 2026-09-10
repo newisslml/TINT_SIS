@@ -4,12 +4,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from tint_sis.adapters.colorant_cm3 import write_cm3_variant
 from tint_sis.adapters.homologos_filter import run_homologos_filter
 from tint_sis.db import repository
 from tint_sis.db.database import DEFAULT_DB_PATH, get_session
 from tint_sis.routing import find_homologos_expert_pairs, find_homologos_master_pair
 
 ProgressCallback = Callable[[dict], None]
+
+# Tienda para la que, además del <grupo>_ready.{xlsx,csv}, se genera una variante
+# <grupo>_cm3.xlsx con las cantidades de los primeros 5 colorantes convertidas de
+# Oz/48 a cm³ (columnas R,T,V,X,Z -> valor/48*29.574). Ver adapters/colorant_cm3.py.
+CM3_VARIANT_GRUPO = "Tiendas 14"
 
 
 def _emit(cb: ProgressCallback | None, **event: object) -> None:
@@ -108,6 +114,18 @@ def run_pipeline(
                 summary.archivos.append(
                     GeneratedFile(result.grupo, ".csv", result.filas_filtradas, str(result.csv_path))
                 )
+
+                if result.grupo == CM3_VARIANT_GRUPO:
+                    cm3_path = result.xlsx_path.with_name(f"{result.grupo}_cm3.xlsx")
+                    print(f"Generando variante cm3... ({result.grupo})")
+                    filas_cm3 = write_cm3_variant(result.xlsx_path, cm3_path)
+                    summary.archivos_excel_passthrough.append(cm3_path)
+                    repository.record_generated_file(
+                        session, batch, result.grupo, "colorant_cm3_xlsx", str(cm3_path)
+                    )
+                    summary.archivos.append(
+                        GeneratedFile(result.grupo, ".xlsx", filas_cm3, str(cm3_path))
+                    )
 
         session.commit()
     finally:
