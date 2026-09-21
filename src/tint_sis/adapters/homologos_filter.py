@@ -93,6 +93,31 @@ def read_homologos_ids(path: Path, grupo: str) -> set[str]:
         wb.close()
 
 
+def read_expert_ids(expert_path: Path) -> set[str]:
+    """Devuelve todos los ID_TINT presentes en la hoja "Formulas" del experto
+    (misma ubicacion de hoja/columna que usa `filter_expert_by_ids`). Se usa
+    para el panel de cobertura del editor de homologos: que IDs del experto no
+    estan asignados a ninguna tienda."""
+    wb = openpyxl.load_workbook(expert_path, read_only=True, data_only=True)
+    try:
+        ws, _ = _pick_expert_sheet(wb)
+        rows_iter = ws.iter_rows(values_only=True)
+        header = list(next(rows_iter))
+        id_idx = _find_expert_id_column(header)
+        ids: set[str] = set()
+        for row in rows_iter:
+            if id_idx >= len(row):
+                continue
+            value = row[id_idx]
+            if value is not None:
+                text = str(value).strip()
+                if text:
+                    ids.add(text)
+        return ids
+    finally:
+        wb.close()
+
+
 def filter_expert_by_ids(
     expert_path: Path,
     ids: set[str],

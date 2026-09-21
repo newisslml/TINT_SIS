@@ -180,3 +180,30 @@ sirve para xData. Para un software nuevo:
    formato exacto que pide ese software.
 3. Registralo en `run_homologos_filter` (`adapters/homologos_filter.py`) o en el
    pipeline, según si aplica a todas las tiendas o solo a alguna.
+
+## 8. Generar el ejecutable e instalador para Windows
+
+Requisitos (una sola vez): el `.venv` del proyecto y **Inno Setup 6**
+(`winget install JRSoftware.InnoSetup`). Para usar el logo, dejá
+`assets\logo.png` (256×256 o más) o `assets\tint_sis.ico`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1            # con tests
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -SkipTests # sin tests
+```
+
+La versión sale de `src\tint_sis\__init__.py` (`__version__`). Resultado:
+
+- `dist\TINT_SIS\TINT_SIS.exe` — la app lista para correr (carpeta completa).
+- `dist\installer\TINT_SIS_Setup_<versión>.exe` — instalador para otros PCs
+  (instala en Program Files, crea accesos directos, instala WebView2 si falta).
+
+Cerrá cualquier `TINT_SIS.exe` abierto antes de construir (bloquea `dist\`).
+
+Dónde guarda los datos la app instalada:
+
+- `Documentos\TINT_SIS\input` y `output` — archivos de trabajo y resultados.
+- `%LOCALAPPDATA%\TINT_SIS\` — `config.json`, `tint_sis.db` y `logs\tint_sis.log`
+  (revisar el log si la app no arranca).
+
+Desinstalar no borra ninguna de esas carpetas.

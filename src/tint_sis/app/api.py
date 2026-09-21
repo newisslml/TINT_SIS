@@ -9,14 +9,60 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
+from tint_sis.adapters import homologos_editor
+from tint_sis.adapters.homologos_editor import HomologosEditor
+from tint_sis.adapters.homologos_filter import read_expert_ids
 from tint_sis.config import AppConfig, load_config, save_config
 from tint_sis.db import repository
 from tint_sis.db.database import get_session
 from tint_sis.preview import preview_batch
+from tint_sis.routing import find_homologos_master_pair
 
 from . import _runner
 
 router = APIRouter()
+
+# Editor de homologos_TINT.xlsx: se abre una vez (carga pesada, ~decenas de
+# segundos con el archivo real) y se mantiene en memoria entre pedidos hasta
+# que la UI pide guardar. Un solo usuario/proceso, asi que un estado a nivel
+# de modulo alcanza (mismo patron que `_runner` para la corrida del filtro).
+_editor: HomologosEditor | None = None
+_editor_path: Path | None = None
+
+# read_expert_ids() lee el experto entero (~180k filas, ~50s medido con el
+# archivo real) para calcular la cobertura. Sin cache, cada GET a una tienda
+# -incluido el refresco despues de cada edicion- pagaba ese costo de nuevo;
+# se cachea por archivo+mtime (se invalida sola si cambia el experto activo).
+_expert_ids_cache: dict[Path, tuple[float, set[str]]] = {}
+
+
+def _cached_expert_ids(path: Path) -> set[str]:
+    mtime = path.stat().st_mtime
+    cached = _expert_ids_cache.get(path)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+    ids = read_expert_ids(path)
+    _expert_ids_cache[path] = (mtime, ids)
+    return ids
+
+
+def _homologos_path(cfg: AppConfig) -> Path:
+    return Path(cfg.input_dir) / cfg.homologos_master_name
+
+
+def _get_editor() -> HomologosEditor:
+    global _editor, _editor_path
+    cfg = _cfg()
+    path = _homologos_path(cfg)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"No se encontro {path.name} en la carpeta de entrada")
+    if _editor is None or _editor_path != path:
+        try:
+            _editor = HomologosEditor(path)
+        except Exception as exc:  # noqa: BLE001 - se traduce a error de API
+            raise HTTPException(status_code=500, detail=f"No se pudo abrir {path.name}: {exc}") from exc
+        _editor_path = path
+    return _editor
 
 
 def _cfg() -> AppConfig:
@@ -334,3 +380,118 @@ async def post_input_upload(file: UploadFile) -> dict:
     data = await file.read()
     destino.write_bytes(data)
     return {"guardado": nombre, "preview": preview_batch(cfg).to_dict()}
+
+
+# --------------------------------------------------------------------------- #
+# homologos (editor)
+# --------------------------------------------------------------------------- #
+def _homologo_sheet_to_dict(sheet) -> dict:
+    return {
+        "titulo": sheet.titulo,
+        "filas_no_reconocidas": sheet.filas_no_reconocidas,
+        "lineas": [
+            {
+                "nombre": linea.nombre,
+                "path": linea.path,
+                "pendiente": linea.pendiente,
+                "homologos": [
+                    {
+                        "nombre": h.nombre,
+                        "path": h.path,
+                        "nota": h.nota,
+                        "pendiente": h.pendiente,
+                        "ids": h.ids,
+                    }
+                    for h in linea.homologos
+                ],
+            }
+            for linea in sheet.lineas
+        ],
+    }
+
+
+@router.get("/homologos/tiendas")
+def get_homologos_tiendas() -> dict:
+    cfg = _cfg()
+    path = _homologos_path(cfg)
+    if not path.exists():
+        return {"tiendas": [], "existe": False}
+    return {"tiendas": homologos_editor.list_sheet_names(path), "existe": True}
+
+
+@router.get("/homologos/{tienda}")
+def get_homologos_tienda(tienda: str) -> dict:
+    editor = _get_editor()
+    if tienda not in editor.tiendas():
+        raise HTTPException(status_code=404, detail=f"La hoja '{tienda}' no existe en {editor.path.name}")
+    sheet = editor.arbol(tienda)
+
+    cfg = _cfg()
+    par = find_homologos_master_pair(
+        Path(cfg.input_dir), master_name=cfg.homologos_master_name, expert_glob=cfg.expert_glob
+    )
+    cobertura = None
+    experto_usado = None
+    if par is not None:
+        try:
+            expert_ids = _cached_expert_ids(par.expert_path)
+            cobertura = homologos_editor.compute_cobertura(sheet, expert_ids)
+            experto_usado = par.expert_path.name
+        except (OSError, KeyError, ValueError):
+            cobertura = None
+
+    data = _homologo_sheet_to_dict(sheet)
+    data["cobertura"] = cobertura
+    data["experto_usado"] = experto_usado
+    data["cambios_sin_guardar"] = editor.dirty
+    return data
+
+
+@router.post("/homologos/{tienda}/ids")
+def post_homologos_id(tienda: str, payload: dict) -> dict:
+    editor = _get_editor()
+    try:
+        editor.agregar_id(tienda, payload.get("linea"), payload.get("homologo"), payload.get("id_tint"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "cambios_sin_guardar": editor.dirty}
+
+
+@router.delete("/homologos/{tienda}/ids")
+def delete_homologos_id(tienda: str, payload: dict) -> dict:
+    editor = _get_editor()
+    try:
+        editor.quitar_id(tienda, payload.get("linea"), payload.get("homologo"), payload.get("id_tint"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "cambios_sin_guardar": editor.dirty}
+
+
+@router.post("/homologos/{tienda}/homologos")
+def post_homologos_homologo(tienda: str, payload: dict) -> dict:
+    editor = _get_editor()
+    try:
+        editor.agregar_homologo(tienda, payload.get("linea"), payload.get("nombre"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "cambios_sin_guardar": editor.dirty}
+
+
+@router.post("/homologos/{tienda}/lineas")
+def post_homologos_linea(tienda: str, payload: dict) -> dict:
+    editor = _get_editor()
+    try:
+        editor.agregar_linea(tienda, payload.get("nombre"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "cambios_sin_guardar": editor.dirty}
+
+
+@router.post("/homologos/guardar")
+def post_homologos_guardar() -> dict:
+    editor = _get_editor()
+    try:
+        backup = editor.guardar()
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"No se pudo guardar: {exc}") from exc
+    return {"guardado": True, "backup": str(backup)}

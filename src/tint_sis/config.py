@@ -12,23 +12,19 @@ Ubicacion del archivo:
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from tint_sis.adapters.homologos_filter import ENABLED_GRUPOS as _DEFAULT_ENABLED
+from tint_sis.paths import app_data_dir, default_data_dir, default_db_path
 from tint_sis.routing import EXPERT_MASTER_GLOB as _DEFAULT_EXPERT_GLOB
 from tint_sis.routing import HOMOLOGOS_MASTER_NAME as _DEFAULT_HOMOLOGOS_NAME
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_DATA = _REPO_ROOT / "data"
+_DEFAULT_DATA = default_data_dir()
 
 
 def default_config_path() -> Path:
-    base = os.environ.get("LOCALAPPDATA")
-    if base:
-        return Path(base) / "TINT_SIS" / "config.json"
-    return Path.home() / ".config" / "tint_sis" / "config.json"
+    return app_data_dir() / "config.json"
 
 
 @dataclass
@@ -37,7 +33,7 @@ class AppConfig:
     # Carpeta base de salida. Los finales se guardan por software dentro de ella:
     # <output_dir>/Tiendas filtradas/<grupo>_ready.{csv,xlsx}, <output_dir>/SANTINT/..., etc.
     output_dir: Path = _DEFAULT_DATA / "output"
-    db_path: Path = _DEFAULT_DATA / "tint_sis.db"
+    db_path: Path = default_db_path()
     enabled_grupos: set[str] = field(default_factory=lambda: set(_DEFAULT_ENABLED))
     homologos_master_name: str = _DEFAULT_HOMOLOGOS_NAME
     expert_glob: str = _DEFAULT_EXPERT_GLOB

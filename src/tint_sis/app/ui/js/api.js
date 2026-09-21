@@ -29,6 +29,17 @@ export const api = {
   runCancel: () => req("POST", "/run/cancel"),
   config: () => req("GET", "/config"),
   saveConfig: (c) => req("PUT", "/config", c),
+  homologosTiendas: () => req("GET", "/homologos/tiendas"),
+  homologosTienda: (tienda) => req("GET", `/homologos/${encodeURIComponent(tienda)}`),
+  homologosAgregarId: (tienda, linea, homologo, id_tint) =>
+    req("POST", `/homologos/${encodeURIComponent(tienda)}/ids`, { linea, homologo, id_tint }),
+  homologosQuitarId: (tienda, linea, homologo, id_tint) =>
+    req("DELETE", `/homologos/${encodeURIComponent(tienda)}/ids`, { linea, homologo, id_tint }),
+  homologosAgregarHomologo: (tienda, linea, nombre) =>
+    req("POST", `/homologos/${encodeURIComponent(tienda)}/homologos`, { linea, nombre }),
+  homologosAgregarLinea: (tienda, nombre) =>
+    req("POST", `/homologos/${encodeURIComponent(tienda)}/lineas`, { nombre }),
+  homologosGuardar: () => req("POST", "/homologos/guardar"),
   openInput: () => req("POST", "/input/open"),
   async uploadInput(file) {
     const fd = new FormData();

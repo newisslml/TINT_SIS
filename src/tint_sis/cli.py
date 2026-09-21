@@ -3,9 +3,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from tint_sis.paths import default_data_dir
 from tint_sis.pipeline import run_pipeline
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = default_data_dir()
 
 
 def main() -> None:
@@ -15,9 +16,9 @@ def main() -> None:
     run_parser = subparsers.add_parser(
         "run", help="Procesa un ciclo: experto xData + homologos -> archivos filtrados por tienda"
     )
-    run_parser.add_argument("--input", default=str(REPO_ROOT / "data" / "input"))
+    run_parser.add_argument("--input", default=str(DATA_DIR / "input"))
     # Carpeta base: los finales se guardan en <output>/<software>/ (p.ej. "data/output/Tiendas filtradas/").
-    run_parser.add_argument("--output", default=str(REPO_ROOT / "data" / "output"))
+    run_parser.add_argument("--output", default=str(DATA_DIR / "output"))
     run_parser.add_argument("--db", default=None)
 
     args = parser.parse_args()

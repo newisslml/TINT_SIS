@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+build/
+dist/
+packaging/redist/
 data/tint_sis.db
 data/input/*
 data/output/*

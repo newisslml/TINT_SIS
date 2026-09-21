@@ -6,6 +6,7 @@ import * as ejecucion from "./views/ejecucion.js";
 import * as resultados from "./views/resultados.js";
 import * as historial from "./views/historial.js";
 import * as configuracion from "./views/configuracion.js";
+import * as homologos from "./views/homologos.js";
 
 const ROUTES = {
   inicio,
@@ -14,7 +15,7 @@ const ROUTES = {
   resultados,
   historial,
   configuracion,
-  homologos: soon("Homólogos (editor)", "Editar qué ID_TINT lleva cada tienda sin abrir Excel. Llega en la v2."),
+  homologos,
   advertencias: soon("Advertencias", "Qué quedó afuera del ciclo y por qué. En la v1 puede vivir dentro de Resultados."),
 };
 
