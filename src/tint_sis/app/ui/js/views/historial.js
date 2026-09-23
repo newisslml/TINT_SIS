@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { h, card, btn, tag, tabla } from "../dom.js";
 
-const linklike = (label, onClick) => h("button", { class: "linklike", onclick: onClick });
+const linklike = (label, onClick) => h("button", { class: "linklike", onclick: onClick }, label);
 
 const abrir = (ruta, modo) => api.reveal(ruta, modo).catch((e) => alert("No se pudo abrir: " + e.message));
 

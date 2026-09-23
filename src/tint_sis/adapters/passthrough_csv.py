@@ -58,6 +58,7 @@ def write_passthrough_csv(
     on_progress: Callable[[dict], None] | None = None,
     total_hint: int | None = None,
     progress_every: int = 2000,
+    sheet_name: str | None = None,
 ) -> int:
     """Convierte un Excel que ya viene en formato final (una fila por formula, con
     Clasificacion/Producto/Cartilla/Formato/... como columnas propias) directo a
@@ -68,13 +69,14 @@ def write_passthrough_csv(
 
     `on_progress`, si se pasa, recibe {leidas, total} cada `progress_every` filas;
     `total_hint` es el total esperado (lo sabe quien llama tras filtrar).
+    `sheet_name` elige la hoja (default: la primera).
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     wb = openpyxl.load_workbook(input_path, data_only=True, read_only=True)
-    ws = wb[wb.sheetnames[0]]
+    ws = wb[sheet_name] if sheet_name in wb.sheetnames else wb[wb.sheetnames[0]]
     total = total_hint
     if total is None:
         mr = ws.max_row

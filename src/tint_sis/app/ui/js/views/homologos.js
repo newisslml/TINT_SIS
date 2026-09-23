@@ -39,6 +39,14 @@ function inlineForm(placeholder, onSubmit) {
 export async function render(view, { navigate }) {
   view.append(h("h1", { class: "view__title" }, "Homólogos"));
   view.append(h("p", { class: "muted" }, "Qué ID_TINT le corresponde a cada homólogo, por tienda. La primera carga del archivo maestro puede tardar — es un archivo grande."));
+  view.append(
+    h(
+      "div",
+      { class: "banner banner--info" },
+      "El ciclo ya no filtra por ID_TINT: usa la tabla de productos (productos_TINT.xlsx), que se edita en Excel. " +
+        "Este editor queda como referencia del flujo anterior."
+    )
+  );
 
   const tabsRow = h("div", { class: "row", style: "gap:8px" });
   view.append(tabsRow);
@@ -79,7 +87,7 @@ export async function render(view, { navigate }) {
     if (!cobertura) {
       return card(
         h("h2", { class: "section__title" }, "Cobertura"),
-        h("p", { class: "muted" }, "No se pudo calcular: falta el archivo experto (xData_DATACOMPLETA_*.xlsx) en la carpeta de entrada.")
+        h("p", { class: "muted" }, "No se pudo calcular: falta el experto xData con ID_TINT (xData_DATACOMPLETA_*.xlsx, flujo anterior) en la carpeta de entrada.")
       );
     }
     const lista = (items, vacio) => {

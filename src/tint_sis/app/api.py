@@ -16,7 +16,7 @@ from tint_sis.config import AppConfig, load_config, save_config
 from tint_sis.db import repository
 from tint_sis.db.database import get_session
 from tint_sis.preview import preview_batch
-from tint_sis.routing import find_homologos_master_pair
+from tint_sis.routing import EXPERT_MASTER_GLOB, find_homologos_master_pair
 
 from . import _runner
 
@@ -94,9 +94,37 @@ def _count_data_rows(path: Path) -> int:
         return 0
 
 
+# Carpetas donde el flujo anterior (un solo experto xData) dejaba los archivos.
+_CARPETAS_FLUJO_ANTERIOR = ("xData", "Tiendas filtradas")
+
+
+def _salida_de_registro(reg, filtrados_dirname: str) -> tuple[str, dict, int]:
+    """(software, fila para la UI, filas contadas) de un archivo generado. El
+    software es la carpeta del archivo (<salida>/Archivos filtrados/<Software>/);
+    los ciclos anteriores a la salida por software quedaban sueltos en la carpeta
+    de filtrados (xData/ y despues Tiendas filtradas/). Las filas solo se cuentan
+    para los .csv (contar un .xlsx obliga a abrirlo)."""
+    ruta = Path(reg.ruta)
+    software = ruta.parent.name
+    if software in (filtrados_dirname, *_CARPETAS_FLUJO_ANTERIOR):
+        software = "Flujo anterior (xData)"
+    existe = ruta.exists()
+    tipo = ruta.suffix.lower() or (".csv" if reg.adaptador.endswith("csv") else ".xlsx")
+    filas = _count_data_rows(ruta) if tipo == ".csv" and existe else 0
+    salida = {
+        "salida": ruta.name,
+        "tienda": reg.linea_producto,
+        "tipo": tipo,
+        "filas": _fmt_int(filas) if filas else "-",
+        "existe": existe,
+        "ruta": str(ruta),
+    }
+    return software, salida, filas
+
+
 def _last_batch_files(cfg: AppConfig):
     """(fecha, grupos_dict, n_archivos, filas_totales) del ultimo batch en la DB,
-    o None si no hay ninguno."""
+    o None si no hay ninguno. `grupos` va por software."""
     session = get_session(cfg.db_path)
     try:
         batch = repository.get_last_batch(session)
@@ -106,20 +134,9 @@ def _last_batch_files(cfg: AppConfig):
         grupos: dict[str, list[dict]] = {}
         filas_totales = 0
         for reg in registros:
-            ruta = Path(reg.ruta)
-            tipo = ".csv" if reg.adaptador.endswith("csv") else ".xlsx"
-            filas = _count_data_rows(ruta) if tipo == ".csv" and ruta.exists() else 0
-            if tipo == ".csv":
-                filas_totales += filas
-            grupos.setdefault(reg.linea_producto, []).append(
-                {
-                    "salida": ruta.name,
-                    "tipo": tipo,
-                    "filas": _fmt_int(filas) if filas else "-",
-                    "existe": ruta.exists(),
-                    "ruta": str(ruta),
-                }
-            )
+            software, salida, filas = _salida_de_registro(reg, cfg.filtrados_dirname)
+            filas_totales += filas
+            grupos.setdefault(software, []).append(salida)
         return {
             "fecha": _fmt_dt(batch.creado_en),
             "grupos": grupos,
@@ -137,10 +154,11 @@ def _last_batch_files(cfg: AppConfig):
 def get_estado() -> dict:
     cfg = _cfg()
     last = _last_batch_files(cfg)
+    softwares = [s.nombre for s in cfg.softwares_activos()]
     return {
         "carpeta_trabajo": str(Path(cfg.input_dir).parent),
         "ultimo_ciclo": last["fecha"] if last else "sin ciclos",
-        "software": "xData",
+        "software": ", ".join(softwares) or "-",
     }
 
 
@@ -151,7 +169,7 @@ def get_inicio() -> dict:
     prev = preview_batch(cfg)
 
     alertas = []
-    for b in prev.bloqueantes:
+    for b in prev.bloqueantes + prev.advertencias:
         alertas.append({"nivel": "advertencia", "texto": b})
     if not cfg.delivery_paths:
         alertas.append(
@@ -170,7 +188,8 @@ def get_inicio() -> dict:
     return {
         "ultimo_ciclo": {
             "fecha": last["fecha"] if last else "-",
-            "experto": prev.experto_activo or "(sin experto en la carpeta)",
+            "experto": " · ".join(e.archivo for e in prev.expertos if e.archivo)
+            or "(sin expertos en la carpeta)",
             "archivos_generados": last["n_archivos"] if last else 0,
             "advertencias": advertencias,
         },
@@ -221,9 +240,7 @@ def get_resultados() -> dict:
             "filas_totales": last["filas_totales"],
             "advertencias": "-",
         },
-        "grupos": [
-            {"titulo": f"xData -> {g}", "salidas": s} for g, s in last["grupos"].items()
-        ],
+        "grupos": [{"titulo": software, "salidas": s} for software, s in last["grupos"].items()],
         "advertencias": [],
     }
 
@@ -244,27 +261,17 @@ def get_historial() -> dict:
             carpetas: list[Path] = []
             carpeta_viva = None
             for reg in registros:
+                software, salida, filas = _salida_de_registro(reg, cfg.filtrados_dirname)
                 ruta = Path(reg.ruta)
-                existe = ruta.exists()
-                tipo = ".csv" if reg.adaptador.endswith("csv") else ".xlsx"
-                filas = _count_data_rows(ruta) if tipo == ".csv" and existe else 0
-                if existe:
+                if salida["existe"]:
                     disponibles += 1
                     if carpeta_viva is None:
-                        carpeta_viva = ruta.parent
-                if tipo == ".csv":
-                    filas_totales += filas
-                if ruta.parent not in carpetas:
-                    carpetas.append(ruta.parent)
-                grupos.setdefault(reg.linea_producto, []).append(
-                    {
-                        "salida": ruta.name,
-                        "tipo": tipo,
-                        "filas": _fmt_int(filas) if filas else "-",
-                        "existe": existe,
-                        "ruta": str(ruta),
-                    }
-                )
+                        carpeta_viva = _carpeta_ciclo(ruta, cfg.filtrados_dirname)
+                filas_totales += filas
+                carpeta_reg = _carpeta_ciclo(ruta, cfg.filtrados_dirname)
+                if carpeta_reg not in carpetas:
+                    carpetas.append(carpeta_reg)
+                grupos.setdefault(software, []).append(salida)
             # carpeta local del backup: la del primer archivo que aún existe, o la
             # esperada (la del primer registro) si ninguno sigue en disco
             carpeta = carpeta_viva or (carpetas[0] if carpetas else None)
@@ -278,14 +285,19 @@ def get_historial() -> dict:
                     "filas_totales": _fmt_int(filas_totales),
                     "carpeta": str(carpeta) if carpeta else None,
                     "carpeta_existe": bool(carpeta and carpeta.is_dir()),
-                    "grupos": [
-                        {"titulo": f"xData → {g}", "salidas": s} for g, s in grupos.items()
-                    ],
+                    "grupos": [{"titulo": software, "salidas": s} for software, s in grupos.items()],
                 }
             )
         return {"ciclos": ciclos}
     finally:
         session.close()
+
+
+def _carpeta_ciclo(ruta: Path, filtrados_dirname: str) -> Path:
+    """Carpeta que agrupa todas las salidas de un ciclo: la de los filtrados
+    (padre de las carpetas por software). Para registros viejos (antes de la
+    salida por software) es la carpeta del propio archivo."""
+    return ruta.parent.parent if ruta.parent.parent.name == filtrados_dirname else ruta.parent
 
 
 def _reveal_roots(cfg: AppConfig) -> list[Path]:
@@ -428,7 +440,7 @@ def get_homologos_tienda(tienda: str) -> dict:
 
     cfg = _cfg()
     par = find_homologos_master_pair(
-        Path(cfg.input_dir), master_name=cfg.homologos_master_name, expert_glob=cfg.expert_glob
+        Path(cfg.input_dir), master_name=cfg.homologos_master_name, expert_glob=EXPERT_MASTER_GLOB
     )
     cobertura = None
     experto_usado = None

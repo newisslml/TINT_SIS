@@ -1,14 +1,15 @@
 """Estado de la corrida en curso.
 
-1 usuario / 1 PC: hay como mucho UNA corrida a la vez. El pipeline (lento, 12-15
-min) se ejecuta en un hilo aparte; `on_progress` actualiza este estado y la UI lo
-consulta por polling en `/api/run/current`.
+1 usuario / 1 PC: hay como mucho UNA corrida a la vez. El pipeline se ejecuta en
+un hilo aparte; `on_progress` actualiza este estado y la UI lo consulta por
+polling en `/api/run/current`. Hay un renglon de progreso por archivo experto
+(cada experto se lee una vez y genera los archivos de todas sus tiendas).
 
 Cancelacion cooperativa: `request_cancel()` levanta una bandera; el callback
-`on_progress` (que el motor invoca muy seguido: cada 2000 filas y por tienda) la
+`on_progress` (que el motor invoca muy seguido: cada 2000 filas y por experto) la
 chequea y lanza `RunCancelled`, que sube por el pipeline sin commitear la corrida.
-La unica ventana sin chequeo es el `.save()` del xlsx de una tienda (sin hook),
-asi que cancelar ahi puede tardar hasta 1-2 min en soltar.
+La unica ventana sin chequeo es el armado de los libros filtrados de un experto
+(comprimir el xlsx de cada tienda), que tarda segundos.
 """
 from __future__ import annotations
 
@@ -31,39 +32,39 @@ class RunState:
     estado: str = "idle"  # idle | en_curso | ok | error
     started_at: float | None = None
     finished_at: float | None = None
-    total_tiendas: int = 0
-    tiendas: dict[str, int] = field(default_factory=dict)  # grupo -> % (0..100)
-    tiendas_txt: dict[str, str] = field(default_factory=dict)  # grupo -> etapa legible
-    tiendas_seen: dict[str, float] = field(default_factory=dict)  # grupo -> ts del ultimo evento
-    tiendas_cap: dict[str, int] = field(default_factory=dict)  # grupo -> techo de creep de la etapa
-    log_buckets: dict[str, int] = field(default_factory=dict)  # grupo -> ultimo 25% logueado
+    total_expertos: int = 0
+    expertos: dict[str, int] = field(default_factory=dict)  # experto -> % (0..100)
+    expertos_txt: dict[str, str] = field(default_factory=dict)  # experto -> etapa legible
+    expertos_seen: dict[str, float] = field(default_factory=dict)  # experto -> ts del ultimo evento
+    expertos_cap: dict[str, int] = field(default_factory=dict)  # experto -> techo de creep de la etapa
+    log_buckets: dict[str, int] = field(default_factory=dict)  # experto -> ultimo 25% logueado
     log: list[str] = field(default_factory=list)
     error: str | None = None
     summary: dict | None = None  # resultados-shaped, listo para /api/resultados
 
-    def _tiendas_view(self, now: float) -> list[dict]:
-        # Entre eventos (sobre todo durante el .save() del xlsx, que no tiene hook)
-        # la barra de una tienda no debe quedar congelada: se la deja avanzar
+    def _expertos_view(self, now: float) -> list[dict]:
+        # Entre eventos (armado de los libros filtrados, que no tiene hook) la
+        # barra de un experto no debe quedar congelada: se la deja avanzar
         # despacio hasta el techo de su etapa.
         out = []
-        for grupo, pct in self.tiendas.items():
+        for experto, pct in self.expertos.items():
             if 0 < pct < 100:
-                stale = now - self.tiendas_seen.get(grupo, now)
+                stale = now - self.expertos_seen.get(experto, now)
                 if stale > 2:
-                    cap = self.tiendas_cap.get(grupo, pct)
-                    pct = min(cap, pct + int(stale / 6))
-            out.append({"grupo": grupo, "progreso": pct, "texto": self.tiendas_txt.get(grupo, "")})
+                    cap = self.expertos_cap.get(experto, pct)
+                    pct = min(cap, pct + int(stale / 3))
+            out.append({"experto": experto, "progreso": pct, "texto": self.expertos_txt.get(experto, "")})
         return out
 
     def snapshot(self) -> dict:
         now = time.time()
         ahora = self.finished_at or now
         elapsed = int(ahora - self.started_at) if self.started_at else 0
-        tv = self._tiendas_view(now)
+        tv = self._expertos_view(now)
         pcts = [t["progreso"] for t in tv]
-        # el promedio se hace sobre el total de tiendas del ciclo, no sobre las que
-        # ya arrancaron, para que la barra global no salte de golpe.
-        divisor = max(self.total_tiendas, len(pcts), 1)
+        # el promedio se hace sobre el total de expertos del ciclo, no sobre los
+        # que ya arrancaron, para que la barra global no salte de golpe.
+        divisor = max(self.total_expertos, len(pcts), 1)
         global_pct = int(sum(pcts) / divisor) if pcts else 0
         if self.estado == "ok":
             global_pct = 100
@@ -71,7 +72,7 @@ class RunState:
             "estado": self.estado,
             "progreso_global": global_pct,
             "transcurrido_seg": elapsed,
-            "tiendas": tv,
+            "expertos": tv,
             "log": list(self.log),
             "error": self.error,
         }
@@ -116,7 +117,7 @@ def start(config: AppConfig) -> bool:
         _reset_locked()
         _state.estado = "en_curso"
         _state.started_at = time.time()
-        _state.log.append("Iniciando ciclo xData - filtro por homologos")
+        _state.log.append("Iniciando ciclo - filtro por productos de cada experto")
 
     _thread = threading.Thread(target=_run, args=(config,), daemon=True)
     _thread.start()
@@ -128,11 +129,11 @@ def _reset_locked() -> None:
     _state.estado = "idle"
     _state.started_at = None
     _state.finished_at = None
-    _state.total_tiendas = 0
-    _state.tiendas = {}
-    _state.tiendas_txt = {}
-    _state.tiendas_seen = {}
-    _state.tiendas_cap = {}
+    _state.total_expertos = 0
+    _state.expertos = {}
+    _state.expertos_txt = {}
+    _state.expertos_seen = {}
+    _state.expertos_cap = {}
     _state.log_buckets = {}
     _state.log = []
     _state.error = None
@@ -148,71 +149,68 @@ def _on_progress(event: dict) -> None:
         raise RunCancelled()
     fase = event.get("fase")
     with _lock:
-        if fase == "inicio" and event.get("mensaje") == "Filtro por homologos":
-            _state.total_tiendas = int(event.get("total") or 0)
-        elif fase == "tienda_inicio":
-            grupo = str(event.get("item"))
-            _state.tiendas[grupo] = 2
-            _state.tiendas_txt[grupo] = "arrancando…"
-            _state.tiendas_seen[grupo] = time.time()
-            _state.tiendas_cap[grupo] = 30
-            _state.log.append(str(event.get("mensaje") or f"Filtrando {grupo}"))
-        elif fase == "tienda_progreso":
-            _apply_tienda_progreso(event)
-        elif fase == "tienda_ok":
-            grupo = str(event.get("item"))
-            _state.tiendas[grupo] = 100
-            _state.tiendas_txt[grupo] = "listo"
-            _state.tiendas_seen[grupo] = time.time()
-            _state.log.append(str(event.get("mensaje") or f"{grupo} listo"))
+        if fase == "inicio":
+            _state.total_expertos = int(event.get("total") or 0)
+        elif fase == "experto_inicio":
+            experto = str(event.get("item"))
+            _state.expertos[experto] = 2
+            _state.expertos_txt[experto] = "arrancando…"
+            _state.expertos_seen[experto] = time.time()
+            _state.expertos_cap[experto] = 10
+            _state.log.append(str(event.get("mensaje") or f"Filtrando {experto}"))
+        elif fase == "experto_progreso":
+            _apply_experto_progreso(event)
+        elif fase == "experto_ok":
+            experto = str(event.get("item"))
+            _state.expertos[experto] = 100
+            _state.expertos_txt[experto] = "listo"
+            _state.expertos_seen[experto] = time.time()
+            _state.log.append(str(event.get("mensaje") or f"{experto} listo"))
         elif fase == "fin":
-            _state.log.append("Escribiendo _ready por tienda")
+            _state.log.append("Archivos entregados por software")
         elif fase == "mensaje":
-            # aviso suelto de post-proceso (p.ej. la variante _cm3), va directo al log
+            # aviso suelto (p.ej. el CSV de un software), va directo al log
             _state.log.append(str(event.get("mensaje") or ""))
 
 
-# Reparto del % de cada tienda entre sus 3 sub-etapas. El guardado del .xlsx
-# (openpyxl write_only + number_format por celda, sin hook posible) es la etapa
-# mas larga para las tiendas grandes, por eso se lleva el rango mayor: en esa
-# ventana la barra avanza sola despacio (creep) hasta el techo, con texto claro.
-#   leer+cruzar el experto     ~2..22   (progreso fino, ~20-30 s)
-#   guardar el .xlsx filtrado  ~22..75  (creep + franjas en movimiento)
-#   escribir el .csv           ~75..99  (progreso fino)
-_ETAPA_RANGO = {"filtrar": (2, 22), "guardar_xlsx": (22, 75), "csv": (75, 99)}
+# Reparto del % de cada experto entre sus sub-etapas:
+#   leer el experto y repartir filas por tienda  ~2..50   (progreso fino)
+#   armar el libro filtrado de cada tienda       ~50..70  (sin hook: creep + franjas)
+#   escribir los CSV (solo softwares en CSV)     ~70..99  (progreso fino por archivo)
+_ETAPA_RANGO = {"filtrar": (2, 50), "guardar": (50, 70), "csv": (70, 99)}
 
 
-def _apply_tienda_progreso(event: dict) -> None:
-    grupo = str(event.get("item"))
+def _apply_experto_progreso(event: dict) -> None:
+    experto = str(event.get("item"))
     etapa = str(event.get("etapa") or "filtrar")
     leidas = int(event.get("leidas") or 0)
     sub_total = int(event.get("sub_total") or 0)
     frac = min(1.0, max(0.0, leidas / sub_total)) if sub_total else 0.0
 
     lo, hi = _ETAPA_RANGO.get(etapa, (2, 30))
-    _state.tiendas_seen[grupo] = time.time()
-    _state.tiendas_cap[grupo] = hi
+    _state.expertos_seen[experto] = time.time()
+    _state.expertos_cap[experto] = hi
 
-    if etapa == "guardar_xlsx":
+    if etapa == "guardar":
         pct = lo
-        _state.tiendas_txt[grupo] = "guardando Excel filtrado…"
+        _state.expertos_txt[experto] = "guardando Excel filtrado por tienda…"
     elif etapa == "csv":
         pct = lo + int(frac * (hi - lo))
-        _state.tiendas_txt[grupo] = f"escribiendo CSV  {_miles(leidas)}" + (
+        _state.expertos_txt[experto] = f"escribiendo CSV  {_miles(leidas)}" + (
             f" / {_miles(sub_total)}" if sub_total else ""
         )
     else:  # filtrar
         pct = lo + int(frac * (hi - lo))
-        _state.tiendas_txt[grupo] = f"filtrando experto  {_miles(leidas)}" + (
+        _state.expertos_txt[experto] = f"filtrando experto  {_miles(leidas)}" + (
             f" / {_miles(sub_total)}" if sub_total else ""
         )
         if sub_total:
             bucket = int(frac * 4)  # log al cruzar cada 25 %
-            if bucket > _state.log_buckets.get(grupo, -1):
-                _state.log_buckets[grupo] = bucket
-                _state.log.append(f"{grupo}: {_miles(leidas)} / {_miles(sub_total)} filas del experto")
+            if bucket > _state.log_buckets.get(experto, -1):
+                _state.log_buckets[experto] = bucket
+                _state.log.append(f"{experto}: {_miles(leidas)} / {_miles(sub_total)} filas")
 
-    _state.tiendas[grupo] = max(_state.tiendas.get(grupo, 0), pct)
+    _state.expertos[experto] = max(_state.expertos.get(experto, 0), pct)
 
 
 def _run(config: AppConfig) -> None:
@@ -222,20 +220,23 @@ def _run(config: AppConfig) -> None:
             output_dir=Path(config.output_dir),
             db_path=Path(config.db_path),
             enabled_grupos=set(config.enabled_grupos),
-            homologos_master_name=config.homologos_master_name,
-            expert_glob=config.expert_glob,
+            expertos_habilitados=set(config.expertos_habilitados),
+            productos_name=config.productos_name,
+            expertos_globs=config.expertos,
+            softwares=config.software_defs(),
+            filtrados_dirname=config.filtrados_dirname,
             on_progress=_on_progress,
         )
     except RunCancelled:
         with _lock:
             _state.estado = "cancelado"
             _state.finished_at = time.time()
-            for g, p in list(_state.tiendas.items()):
+            for e, p in list(_state.expertos.items()):
                 if 0 < p < 100:
-                    _state.tiendas_txt[g] = "cancelado"
+                    _state.expertos_txt[e] = "cancelado"
             _state.log.append(
-                "Ciclo cancelado por el usuario. Las tiendas que ya habían terminado "
-                "quedaron escritas; el resto no se generó."
+                "Ciclo cancelado por el usuario. Los softwares de los expertos que ya "
+                "habían terminado quedaron escritos; el resto no se generó."
             )
         return
     except Exception:  # noqa: BLE001 - se muestra el error crudo en la UI
@@ -248,16 +249,17 @@ def _run(config: AppConfig) -> None:
 
     grupos: dict[str, list[dict]] = {}
     for gf in summary.archivos:
-        grupos.setdefault(gf.grupo, []).append(
+        grupos.setdefault(gf.software, []).append(
             {
                 "salida": Path(gf.ruta).name,
+                "tienda": gf.grupo,
                 "tipo": gf.tipo,
                 "filas": f"{gf.filas:,}".replace(",", "."),
                 "existe": Path(gf.ruta).exists(),
                 "ruta": str(gf.ruta),
             }
         )
-    filas_totales = sum(gf.filas for gf in summary.archivos if gf.tipo == ".csv")
+    filas_totales = sum(gf.filas for gf in summary.archivos)
 
     with _lock:
         _state.estado = "ok"
@@ -268,9 +270,7 @@ def _run(config: AppConfig) -> None:
                 "filas_totales": f"{filas_totales:,}".replace(",", "."),
                 "advertencias": len(summary.ingestion_warnings),
             },
-            "grupos": [
-                {"titulo": f"xData -> {g}", "salidas": s} for g, s in grupos.items()
-            ],
+            "grupos": [{"titulo": software, "salidas": s} for software, s in grupos.items()],
             "advertencias": list(summary.ingestion_warnings),
         }
         _state.log.append(f"Ciclo terminado. {len(summary.archivos)} archivos generados.")

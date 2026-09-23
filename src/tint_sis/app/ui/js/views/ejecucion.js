@@ -10,16 +10,16 @@ function fmt(seg) {
 export async function render(view, { navigate }) {
   view.append(h("h1", { class: "view__title" }, "Ejecución / progreso"));
   view.append(
-    h("p", { class: "muted" }, "El sistema está trabajando. El filtro tarda entre 12 y 15 min con las 4 tiendas.")
+    h("p", { class: "muted" }, "El sistema está trabajando: cada experto se lee una vez y se entregan los archivos filtrados a cada software.")
   );
 
   const globalLbl = h("h2", { class: "section__title" }, "0%");
   const globalBar = bar(0);
   view.append(card(globalLbl, globalBar));
 
-  const perStore = card(h("h2", { class: "section__title" }, "Progreso por tienda"));
+  const perStore = card(h("h2", { class: "section__title" }, "Progreso por experto"));
   view.append(perStore);
-  const storeRows = new Map(); // grupo -> {fill, pct, txt}
+  const storeRows = new Map(); // experto -> {fill, pct, txt}
 
   const logBox = h("div", { class: "log" });
   view.append(logBox);
@@ -78,8 +78,8 @@ export async function render(view, { navigate }) {
     globalLbl.textContent = `${snap.progreso_global}%  ·  ${fmt(snap.transcurrido_seg)} transcurrido`;
     globalBar.querySelector(".bar__fill").style.width = `${snap.progreso_global}%`;
 
-    for (const t of snap.tiendas || []) {
-      const row = ensureStoreRow(t.grupo);
+    for (const t of snap.expertos || []) {
+      const row = ensureStoreRow(t.experto);
       row.fill.style.width = `${t.progreso}%`;
       row.pct.textContent = `${t.progreso}%`;
       row.txt.textContent = t.texto || "";
@@ -107,7 +107,7 @@ export async function render(view, { navigate }) {
         h(
           "div",
           { class: "banner banner--info" },
-          "Ciclo cancelado. Las tiendas que ya habían terminado quedaron en data/output/Tiendas filtradas/; el resto no se generó."
+          "Ciclo cancelado. Los softwares de los expertos que ya habían terminado quedaron en <salida>/Archivos filtrados/<Software>/; el resto no se generó."
         )
       );
       footer.replaceChildren(

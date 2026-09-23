@@ -28,8 +28,67 @@ const FILE_SVG = `
 const ESTADO_TAG = {
   ok: () => tag("ok", "OK"),
   "no-habilitado": () => tag("no-habilitado", "Se omite"),
-  error: () => tag("error", "Nombre no reconocido"),
+  desactivado: () => tag("desactivado", "Desactivado"),
+  error: () => tag("error", "Revisar"),
 };
+
+const FORMATO = { csv: "CSV", excel: "Excel" };
+
+// Resumen que se confirma antes de ejecutar: tiendas que se filtran, expertos
+// activos (archivo -> softwares -> tiendas) y lo que queda afuera del ciclo.
+function resumenCiclo(d) {
+  const activos = d.expertos.filter((e) => e.estado === "ok");
+  const afuera = d.expertos.filter((e) => e.estado !== "ok");
+  const tiendas = [...new Set(activos.flatMap((e) => e.detalle.flatMap((s) => s.tiendas)))];
+  const nArchivos = activos.reduce((n, e) => n + e.detalle.reduce((m, s) => m + s.tiendas.length, 0), 0);
+  const bloque = (label, ...contenido) =>
+    h("div", { class: "resumen__bloque" }, h("div", { class: "resumen__label" }, label), ...contenido);
+
+  return h(
+    "div",
+    { class: "resumen" },
+    h("h2", { class: "resumen__titulo" }, "Resumen del nuevo ciclo"),
+    bloque(
+      `Tiendas que se filtran (${tiendas.length})`,
+      h("div", { class: "resumen__chips" }, ...tiendas.map((t) => h("span", { class: "chip chip--ok" }, t)))
+    ),
+    bloque(
+      `Expertos activos (${activos.length})`,
+      ...activos.map((e) =>
+        h(
+          "div",
+          { class: "resumen__experto" },
+          h("div", {}, h("strong", {}, e.label), "  ·  ", h("span", { class: "mono" }, e.archivo)),
+          h(
+            "ul",
+            { class: "resumen__lista" },
+            ...e.detalle.map((s) =>
+              h("li", {}, h("span", { class: "mono" }, s.nombre), ` → ${s.tiendas.join(", ")} (${FORMATO[s.formato] || s.formato})`)
+            )
+          )
+        )
+      )
+    ),
+    afuera.length
+      ? bloque(
+          "No entran en este ciclo",
+          h(
+            "ul",
+            { class: "resumen__lista" },
+            ...afuera.map((e) =>
+              h(
+                "li",
+                {},
+                `${e.label}: ${e.estado === "desactivado" ? "desactivado en Configuración" : "falta el archivo"}`,
+                ` (se omiten ${e.softwares.join(", ")})`
+              )
+            )
+          )
+        )
+      : null,
+    h("div", { class: "resumen__pie" }, `Se generan ${nArchivos} archivos en `, h("span", { class: "mono" }, d.salida || "-"))
+  );
+}
 
 export async function render(view, { navigate }) {
   let data = await api.preview();
@@ -37,7 +96,7 @@ export async function render(view, { navigate }) {
   view.append(h("h1", { class: "view__title" }, "Nuevo ciclo — cargar y revisar"));
 
   // ---------- dropzone real ----------
-  const fileInput = h("input", { type: "file", accept: ".xlsx", style: "display:none" });
+  const fileInput = h("input", { type: "file", accept: ".xlsx,.xlsm", style: "display:none" });
 
   // icono "archivo" al pie del dropzone; el clic dibuja los trazos y burbujea al
   // dropzone (que abre el selector de archivos)
@@ -56,7 +115,7 @@ export async function render(view, { navigate }) {
   const dz = h(
     "div",
     { class: "dropzone" },
-    h("div", { style: "font-weight:600;color:var(--ink)" }, "Arrastrá un archivo .xlsx acá"),
+    h("div", { style: "font-weight:600;color:var(--ink)" }, "Arrastrá un archivo .xlsx o .xlsm acá"),
     h("div", {}, "o hacé clic para elegirlo — se copia a la carpeta de entrada"),
     addIcon,
     fileInput
@@ -103,11 +162,37 @@ export async function render(view, { navigate }) {
       h(
         "div",
         { class: "row canvas-labels", style: "align-items:center" },
-        h("span", { class: "muted" }, "Homólogos activo:"),
-        h("span", { class: "mono" }, data.homologos_activo || "— (falta)"),
-        h("span", { class: "muted", style: "margin-left:12px" }, "Experto:"),
-        h("span", { class: "mono" }, data.experto_activo || "— (falta)"),
+        h("span", { class: "muted" }, "Tabla de productos:"),
+        h("span", { class: "mono" }, data.productos_activo || "— (falta)"),
         ...data.tiendas_habilitadas.map((t) => h("span", { class: "chip chip--ok" }, t))
+      )
+    );
+
+    // Un renglón por experto: qué archivo se usa este ciclo y a qué softwares va.
+    dyn.append(h("h2", { class: "section__title" }, "Expertos del ciclo"));
+    dyn.append(
+      tabla(
+        [
+          { label: "Experto", w: "1.4fr" },
+          { label: "Softwares destino", w: "1.6fr" },
+          { label: "Estado", w: "150px" },
+        ],
+        data.expertos.length
+          ? data.expertos.map((e) => [
+              h(
+                "div",
+                {},
+                h("div", { style: "font-weight:500" }, e.label),
+                h("div", { class: "mono muted", style: "font-size:12px" }, e.archivo || "falta en la carpeta de entrada")
+              ),
+              e.softwares.join(", "),
+              e.estado === "ok"
+                ? tag("ok", "OK")
+                : e.estado === "desactivado"
+                  ? tag("desactivado", "Desactivado")
+                  : tag("error", "Falta"),
+            ])
+          : [[h("span", { class: "muted" }, "Ningún software habilitado."), "", ""]]
       )
     );
 
@@ -123,33 +208,22 @@ export async function render(view, { navigate }) {
       a.flujo,
       (ESTADO_TAG[a.estado] || (() => a.estado))(),
     ];
-    const filaVacia = (msg) => [[h("span", { class: "muted" }, msg), "", "", ""]];
 
-    if (!data.archivos.length) {
-      dyn.append(tabla(COLS, filaVacia("La carpeta de entrada está vacía.")));
-    } else {
-      // Contenedores separados por tipo de archivo, para no mezclar el experto
-      // (que cambia cada ciclo) con el maestro de homólogos (que casi no cambia).
-      const esExperto = (a) => a.archivo.startsWith("xData_");
-      const esHomologos = (a) => a.archivo.startsWith("homologos_");
-      const experto = data.archivos.filter(esExperto);
-      const homologos = data.archivos.filter(esHomologos);
-      const otros = data.archivos.filter((a) => !esExperto(a) && !esHomologos(a));
-
-      dyn.append(h("h2", { class: "section__title" }, "Experto (xData)"));
-      dyn.append(tabla(COLS, experto.length ? experto.map(fila) : filaVacia("No hay ningún archivo experto en la carpeta de entrada.")));
-
-      dyn.append(h("h2", { class: "section__title" }, "Homólogos"));
-      dyn.append(tabla(COLS, homologos.length ? homologos.map(fila) : filaVacia("No hay archivo de homólogos en la carpeta de entrada.")));
-
-      if (otros.length) {
-        dyn.append(h("h2", { class: "section__title" }, "Otros archivos"));
-        dyn.append(tabla(COLS, otros.map(fila)));
-      }
-    }
+    dyn.append(h("h2", { class: "section__title" }, "Archivos en la carpeta de entrada"));
+    dyn.append(
+      tabla(
+        COLS,
+        data.archivos.length
+          ? data.archivos.map(fila)
+          : [[h("span", { class: "muted" }, "La carpeta de entrada está vacía."), "", "", ""]]
+      )
+    );
 
     for (const b of data.bloqueantes || []) {
       dyn.append(h("div", { class: "banner banner--advertencia" }, b));
+    }
+    for (const a of data.advertencias || []) {
+      dyn.append(h("div", { class: "banner banner--info" }, a));
     }
 
     const ejecutar = btn("Ejecutar", {
@@ -157,6 +231,24 @@ export async function render(view, { navigate }) {
       disabled: !data.puede_ejecutar,
       onClick: async () => {
         if (ejecutar.classList.contains("is-launching")) return;
+        // se relee la carpeta por si cambio algo desde que se abrio la vista
+        data = await api.preview();
+        if (!data.puede_ejecutar) {
+          rerender();
+          return;
+        }
+        const eleccion = await modal(
+          resumenCiclo(data),
+          [
+            { id: "cancelar", label: "Cancelar", variant: "secondary" },
+            { id: "ejecutar", label: "Ejecutar ciclo", variant: "primary" },
+          ],
+          { amplio: true }
+        );
+        if (eleccion !== "ejecutar") {
+          rerender();
+          return;
+        }
         ejecutar.classList.add("is-launching");
         try {
           await api.runStart();

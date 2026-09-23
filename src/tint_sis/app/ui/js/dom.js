@@ -49,9 +49,11 @@ export function card(...children) {
   return h("div", { class: "card" }, ...children);
 }
 
-// Modal simple. `acciones` es [{ id, label, variant }]; el primero recibe el foco.
-// Devuelve una promesa con el id elegido, o null si se cierra con Esc / fondo.
-export function modal(texto, acciones = [{ id: "ok", label: "Aceptar", variant: "primary" }]) {
+// Modal simple. `texto` puede ser un string o un nodo; `acciones` es
+// [{ id, label, variant }] y el primero recibe el foco. `amplio` da una caja mas
+// ancha y con scroll (para resumenes). Devuelve una promesa con el id elegido, o
+// null si se cierra con Esc / fondo.
+export function modal(texto, acciones = [{ id: "ok", label: "Aceptar", variant: "primary" }], { amplio = false } = {}) {
   return new Promise((resolve) => {
     const cerrar = (id) => {
       document.removeEventListener("keydown", onKey);
@@ -63,7 +65,7 @@ export function modal(texto, acciones = [{ id: "ok", label: "Aceptar", variant: 
     };
     const box = h(
       "div",
-      { class: "modal__box" },
+      { class: amplio ? "modal__box modal__box--amplio" : "modal__box" },
       h("div", { class: "modal__text" }, texto),
       h(
         "div",

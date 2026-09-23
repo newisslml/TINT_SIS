@@ -65,6 +65,9 @@ let activeCleanup = null;
 async function route() {
   const name = currentRoute();
   setActiveNav(name);
+  // la barra superior (softwares activos, último ciclo) cambia al guardar la
+  // configuración o al terminar un ciclo: se refresca en cada cambio de vista
+  renderStrip();
   if (typeof activeCleanup === "function") {
     try { activeCleanup(); } catch (e) {}
     activeCleanup = null;
@@ -83,6 +86,5 @@ export function navigate(name) {
 }
 
 window.addEventListener("hashchange", route);
-renderStrip();
 if (!location.hash) location.hash = `#/${DEFAULT_ROUTE}`;
 else route();
