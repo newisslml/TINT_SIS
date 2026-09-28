@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import fnmatch
 import re
 from dataclasses import dataclass
@@ -34,6 +35,16 @@ def expert_master_sort_key(path: Path) -> tuple:
     if match:
         return (1, int(match.group("y")), int(match.group("m")), int(match.group("d")))
     return (0, path.stat().st_mtime, 0, 0)
+
+
+def fecha_experto(path: Path) -> tuple[str, bool]:
+    """Fecha DD_MM_YYYY con que salen los archivos de un experto
+    (<tienda>_ready_<fecha>): la del nombre (Experto_1_24_09_2026.xlsx) o, si no la
+    trae, la de modificacion del archivo. El bool dice si vino del nombre."""
+    match = _EXPERT_DATE_RE.search(Path(path).stem)
+    if match:
+        return f"{match.group('d')}_{match.group('m')}_{match.group('y')}", True
+    return datetime.date.fromtimestamp(Path(path).stat().st_mtime).strftime("%d_%m_%Y"), False
 
 
 def matching_files(input_dir: Path, glob: str) -> list[Path]:

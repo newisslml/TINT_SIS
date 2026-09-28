@@ -11,6 +11,102 @@ HEADER_E1 = ["Clasificacion ", "Producto ", "Cartilla ", "Formato ", "Color ", "
 HEADER_E2 = ["Clasificacion", "Producto", "Cartilla", "Color", "Base", "Col1", "Qty1"]
 HEADER_E3 = ["group_code", "product_code", "color_key1", "base_code", "colorant_1", "qnt_ml_1"]
 
+# Encabezados completos, como los reales (maestro = Experto 1; plantillas E2/E3)
+HEADER_MAESTRO = [
+    "Clasificacion ", "Producto ", "Cartilla ", "Formato ", "Tolerancia luz", "Primer", "Color ", "R", "G", "B",
+    "Base ", "Oz base", "Col.1-1/48 onzas", "Col.2-1/48 onzas",
+]
+HEADER_E2_PLANTILLA = [
+    "Clasificacion", "Producto", "Cartilla", "Color", "_Unused_", "_Unused_", "Base", "Base_Qty",
+    "Col1", "Qty1", "Col2", "Qty2", "R", "G", "B", "Color", "Note1", "Note2",
+]
+HEADER_E3_PLANTILLA = [
+    "group_code", "product_code", "color_key1", "color_key2", "color_key3", "comment", "base_code", "can_code",
+    "unit_name", "unit", "fraction", "weightmode", "color_r", "color_g", "color_b",
+    "colorant_1", "qnt_ml_1", "colorant_2", "qnt_ml_2",
+]
+
+
+def carpeta_preparacion(base: Path) -> tuple[Path, Path]:
+    """(carpeta de entrada del ciclo anterior, archivo maestro nuevo) para probar
+    la preparacion del experto:
+      - Habitacional: igual en el maestro y en el ciclo anterior
+      - CP-70: en la tabla sin nombre de Experto 2 (se completa); el maestro le
+        agrega una formula; viene en "Galon (3.785 Lts.)" con base "BASE N"
+      - Opaco: el maestro le quita una formula ("viejo")
+      - Texturex: producto nuevo en "Tineta 4 gl", con una formula repetida
+      - E3 anterior tiene "Esm. al agua / Otro", que el maestro ya no trae"""
+    inp = base / "input"
+    inp.mkdir(parents=True)
+    tabla_productos(
+        inp / "productos_TINT.xlsx",
+        [
+            ["SUBP0004", "Látex", "Habitacional Ceresita", "Ltx. Habitacional Ceresita",
+             "Ltx.Habitacional Ceresita", "Látex / Habitacional", "x", "x", "x", "x"],
+            ["SUBP0008", "Látex", "CP-70 Soquina", "Ltx. CP-70 Soquina construccion",
+             None, "Látex / CP-70", "x", "x", None, None],
+            ["SUBP0031", "Oleos", "Opaco Ceresita", "Oleo Opaco Ceresita",
+             "Oleo Opaco Ceresita", "Oleos / OpacoCeresita", "x", None, None, "x"],
+        ],
+    )
+    habitacional = ["Latex ", "Ltx. Habitacional Ceresita", "Millennium", "Galon", None, None, "amarillo",
+                    239, 207, 30, "Fuerte", 116, "AO-26.5", "AV-430"]
+    cp70 = ["Latex", "Ltx. CP-70 Soquina construccion", "Millennium", "Galon (3.785 Lts.)",
+            "SUGERIR USAR SOLO EN INTERIORES", None, "blanco", None, None, None, "BASE N", 128, "NE-3", None]
+    opaco = ["Oleos", "Oleo Opaco Ceresita", "Millennium", "Galon", None, "*USAR PRIMER GRIS", "gris",
+             128, 128, 128, "fuerte", 116, "ne-1.5", "-0"]
+    experto_openpyxl(
+        inp / "Experto_1_24_09_2026.xlsx",
+        HEADER_MAESTRO,
+        [habitacional, cp70, opaco,
+         ["Oleos", "Oleo Opaco Ceresita", "Millennium", "Galon", None, None, "viejo", None, None, None,
+          "Media", 124, "NE-1", None]],
+        hoja="Hoja1",
+        extra=False,
+    )
+    experto_openpyxl(
+        inp / "Experto_2_24_09_2026.xlsm",
+        HEADER_E2_PLANTILLA,
+        [
+            ["Latex ", "Ltx.Habitacional Ceresita", "Millennium", "amarillo", None, None, "Fuerte", 3785,
+             " AO", 16.3273125, " AV", 264.93375, 239, 207, 30, None, None, None],
+            ["Oleos", "Oleo Opaco Ceresita", "Millennium", "gris", None, None, "fuerte", 3785,
+             " NE", 0.9241875, None, None, 128, 128, 128, None, None, "*USAR PRIMER GRIS"],
+        ],
+        extra=False,
+    )
+    fijos = ["Galon", "USoz/48", 29.574, 48, 0]
+    experto_openpyxl(
+        inp / "Experto_3_24_09_2026.xlsx",
+        HEADER_E3_PLANTILLA,
+        [
+            ["Látex ", "Habitacional", "amarillo", None, None, None, "Fuerte", *fijos, 239, 207, 30, "AO", 26.5, "AV", 430],
+            ["Oleos", "OpacoCeresita", "gris", None, None, None, "Fuerte", *fijos, 128, 128, 128, "NE", 1.5, None, None],
+            ["Esm. al agua", "Otro", "verde", None, None, None, "Base N", *fijos, None, None, None, "VE", 2, None, None],
+        ],
+    )
+    texturex = ["Texturas", "Texturex y Homologos ", "Muestrario Texturex ", "Tineta 4 gl",
+                "Batir Tineta 5' antes de tintear", None, "Alamo ", None, None, None, "según producto", 274.5,
+                "OC-62.8", "VE-44.4"]
+    maestros = base / "maestros"
+    maestros.mkdir()
+    maestro = experto_openpyxl(
+        maestros / "Todo  MP14 28092026.xlsx",
+        HEADER_MAESTRO,
+        [
+            habitacional, cp70, opaco,
+            ["Latex", "Ltx. CP-70 Soquina construccion", "Sipamundo", "Galon", None, None, "rojo", None, None,
+             None, "Intensa", 120, "RO-200", None],
+            texturex,
+            ["Texturas", "Texturex y Homologos ", "SW", "Tineta 4 gl", "Batir Tineta 5' antes de tintear", None,
+             "Arcilla", None, None, None, "según producto", 274.5, "NE-32", None],
+            list(texturex),  # repetida exacta
+        ],
+        hoja="Hoja1",
+        extra=False,
+    )
+    return inp, maestro
+
 
 def experto_openpyxl(path: Path, header: list, filas: list[list], *, hoja: str = "Formulas", extra: bool = True) -> Path:
     """Experto armado con openpyxl: hoja de formulas con autofiltro y, si

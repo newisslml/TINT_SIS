@@ -29,23 +29,28 @@ export const api = {
   runCancel: () => req("POST", "/run/cancel"),
   config: () => req("GET", "/config"),
   saveConfig: (c) => req("PUT", "/config", c),
-  homologosTiendas: () => req("GET", "/homologos/tiendas"),
-  homologosTienda: (tienda) => req("GET", `/homologos/${encodeURIComponent(tienda)}`),
-  homologosAgregarId: (tienda, linea, homologo, id_tint) =>
-    req("POST", `/homologos/${encodeURIComponent(tienda)}/ids`, { linea, homologo, id_tint }),
-  homologosQuitarId: (tienda, linea, homologo, id_tint) =>
-    req("DELETE", `/homologos/${encodeURIComponent(tienda)}/ids`, { linea, homologo, id_tint }),
-  homologosAgregarHomologo: (tienda, linea, nombre) =>
-    req("POST", `/homologos/${encodeURIComponent(tienda)}/homologos`, { linea, nombre }),
-  homologosAgregarLinea: (tienda, nombre) =>
-    req("POST", `/homologos/${encodeURIComponent(tienda)}/lineas`, { nombre }),
-  homologosGuardar: () => req("POST", "/homologos/guardar"),
+  productos: () => req("GET", "/productos"),
+  productosGuardar: (version, filas) => req("PUT", "/productos", { version, filas }),
+  productosCatalogo: () => req("GET", "/productos/catalogo"),
   openInput: () => req("POST", "/input/open"),
+  prepararEstado: () => req("GET", "/preparar/estado"),
+  prepararConfirmar: (nuevos) => req("POST", "/preparar/confirmar", { nuevos }),
+  prepararReiniciar: () => req("POST", "/preparar/reiniciar"),
+  // Dropzone de Nuevo ciclo: {tipo: "entrada", preview} si era un experto o la
+  // tabla (se copia a la carpeta de entrada) o {tipo: "maestro", preparar} si es
+  // el archivo maestro (arranca su análisis).
   async uploadInput(file) {
     const fd = new FormData();
     fd.append("file", file, file.name);
     const res = await fetch("/api/input/upload", { method: "POST", body: fd });
-    if (!res.ok) throw new Error(`upload -> ${res.status}`);
+    if (!res.ok) {
+      let detail = `${res.status}`;
+      try {
+        const j = await res.json();
+        if (j.detail) detail = j.detail;
+      } catch (e) {}
+      throw new Error(detail);
+    }
     return res.json();
   },
 };

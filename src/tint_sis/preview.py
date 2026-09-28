@@ -11,7 +11,7 @@ from pathlib import Path
 
 from tint_sis.config import AppConfig
 from tint_sis.expertos import EXPERTOS
-from tint_sis.routing import EXPERT_MASTER_GLOB, expert_master_sort_key, find_latest_expert
+from tint_sis.routing import EXPERT_MASTER_GLOB, expert_master_sort_key, fecha_experto, find_latest_expert
 
 
 @dataclass
@@ -31,6 +31,15 @@ class ExpertoPreview:
     estado: str  # "ok" | "falta" | "desactivado"
     # por software: {nombre, tiendas (solo las habilitadas), formato} -> resumen antes de ejecutar
     detalle: list[dict] = field(default_factory=list)
+    # fecha DD_MM_YYYY de sus salidas (<tienda>_ready_<fecha>); False = no esta en
+    # el nombre del experto y sale de su fecha de modificacion
+    fecha: str | None = None
+    fecha_del_nombre: bool = False
+
+
+def _experto_preview(label, archivo, softwares, estado, detalle) -> ExpertoPreview:
+    fecha, del_nombre = fecha_experto(archivo) if archivo else (None, False)
+    return ExpertoPreview(label, archivo.name if archivo else None, softwares, estado, detalle, fecha, del_nombre)
 
 
 @dataclass
@@ -106,16 +115,11 @@ def preview_batch(config: AppConfig) -> BatchPreview:
         if not softwares_de[e]:
             continue
         if e not in habilitados:
-            archivo = ultimos[e]
-            expertos.append(
-                ExpertoPreview(e, archivo.name if archivo else None, softwares_de[e], "desactivado", detalle_de[e])
-            )
+            expertos.append(_experto_preview(e, ultimos[e], softwares_de[e], "desactivado", detalle_de[e]))
             continue
         archivo = activos[e]
         expertos.append(
-            ExpertoPreview(
-                e, archivo.name if archivo else None, softwares_de[e], "ok" if archivo else "falta", detalle_de[e]
-            )
+            _experto_preview(e, archivo, softwares_de[e], "ok" if archivo else "falta", detalle_de[e])
         )
     en_uso = [x for x in expertos if x.estado != "desactivado"]
     if not en_uso:

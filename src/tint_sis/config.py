@@ -46,7 +46,7 @@ def _default_softwares() -> list[dict]:
 class AppConfig:
     input_dir: Path = _DEFAULT_DATA / "input"
     # Carpeta base de salida. Los finales se guardan por software dentro de ella:
-    # <output_dir>/Archivos filtrados/<Software>/<tienda>_ready.<ext>
+    # <output_dir>/Archivos filtrados/<Software>/<tienda>_ready_<DD_MM_YYYY>.<ext>
     output_dir: Path = _DEFAULT_DATA / "output"
     db_path: Path = default_db_path()
     enabled_grupos: set[str] = field(default_factory=lambda: set(_DEFAULT_ENABLED))

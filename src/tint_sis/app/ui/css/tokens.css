@@ -1,23 +1,52 @@
-/* Design tokens — espejo de la coleccion "TINT_SIS" del Figma. */
+/* Design tokens — paleta Codelpa (paleta_colores_TINT_SIS.md): marca tomada de
+   codelpa.cl + colores de apoyo, estado y experto. Modo oscuro abajo. */
 :root {
-  --ink: #1b1f24;
-  --ink-muted: #5b6570;
-  --linea: #e2e4e3;
-  --accent: #1b6e76;
-  --ok: #189936;
-  --advertencia: #b45a00;
-  --error: #c42b2b;
-  --no-habilitado: #6b7280;
-  --info: #7c5cff;
+  color-scheme: light;
 
-  --bg: #106069;
-  --bg-grad: linear-gradient(155deg, #34b4c0 0%, #17828d 32%, #106069 58%, #06282d 100%);
+  /* marca Codelpa */
+  --azul: #005db9;
+  --marino: #062533;
+  --ambar: #f5a800;
+  --gris: #5b5b5b;
+
+  --ink: var(--marino);
+  --ink-muted: #4f5e6b;
+  --linea: #d8e1eb;
+  --accent: var(--azul);
+  --on-accent: #ffffff;
+  --accent-soft: #e4eef9;
+  --ambar-soft: #fff3d6;
+  --on-ambar: #7a5200;
+
+  /* estados: color de texto/borde + fondo suave */
+  --ok: #1e8449;
+  --ok-bg: #e3f4ea;
+  --error: #c0392b;
+  --error-bg: #fbe7e5;
+  --info: var(--azul);
+  --info-bg: var(--accent-soft);
+  --advertencia: var(--on-ambar);
+  --advertencia-bg: var(--ambar-soft);
+  --no-habilitado: var(--gris);
+  /* relleno verde con texto blanco (Ejecutar, Guardar, chips y switch activos):
+     el mismo en los dos temas para que el blanco siempre se lea */
+  --ok-fill: #1e8449;
+
+  --experto-1: var(--azul);
+  --experto-2: #c98a00;
+  --experto-3: #0f7a8a;
+
+  --bg: #f3f6fa;
   --surface: #ffffff;
+  --surface-2: #f7f9fc;
 
-  /* textos y controles que van sobre el degradado (fuera de tarjetas) */
-  --on-canvas-strong: #ffffff;
-  --on-canvas-soft: #d7f3f6;
-  --on-canvas-link: #9fe6ec;
+  /* barra lateral y log: azul marino */
+  --nav-bg: var(--marino);
+  --nav-text: #b9c7d2;
+  --log-bg: var(--marino);
+  --log-text: #9fb1bf;
+  --log-text-strong: #e7eff5;
+  --backdrop: rgba(6, 37, 51, 0.55);
 
   --font-ui: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
@@ -33,4 +62,37 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+}
+
+/* Modo oscuro: solo si Windows usa el tema oscuro. La paleta fija fondo,
+   superficies, texto, azul aclarado y ámbar; el resto se deriva de esos. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --ink: #e7eff5;
+    --ink-muted: #9db0bf;
+    --linea: #1d3b4a;
+    --accent: #4f9eeb;
+    --on-accent: #051720;
+    --accent-soft: color-mix(in srgb, #4f9eeb 16%, #0b2531);
+    --ambar-soft: color-mix(in srgb, #f5a800 14%, #0b2531);
+    --on-ambar: var(--ambar);
+
+    --ok: #4cc47f;
+    --ok-bg: color-mix(in srgb, #4cc47f 14%, #0b2531);
+    --error: #f07b6e;
+    --error-bg: color-mix(in srgb, #f07b6e 14%, #0b2531);
+    --info: #4f9eeb;
+    --no-habilitado: #9a9a9a;
+
+    --experto-1: #4f9eeb;
+
+    --bg: #051720;
+    --surface: #0b2531;
+    --surface-2: #0f2d3b;
+
+    --log-bg: #03111a;
+    --backdrop: rgba(0, 0, 0, 0.6);
+  }
 }

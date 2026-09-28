@@ -6,7 +6,14 @@ import openpyxl
 import pytest
 
 from libros_prueba import HEADER_E3, VBA_BYTES, experto_openpyxl, experto_xlsm_a_mano
-from tint_sis.adapters.sheet_filter import FormatoExpertoError, contar_claves, filtrar_libro
+from tint_sis.adapters.sheet_filter import (
+    FormatoExpertoError,
+    contar_claves,
+    contar_valores,
+    filtrar_libro,
+    iterar_filas,
+    quitar_filas_repetidas,
+)
 from tint_sis.expertos import normalizar
 
 KEY_E3 = ("group_code", "product_code")
@@ -200,3 +207,38 @@ def test_contar_claves(e3):
         "Texturas / Nueva": 1,
         "Látex / PajaritoNF": 1,
     }
+
+
+def test_contar_valores_conserva_la_grafia(e3):
+    conteo = contar_valores(e3, ("group_code",))
+    assert conteo[("Látex ",)] == 3  # con el espacio del final
+    assert conteo[("Oleos",)] == 1
+
+
+def test_iterar_filas(e3):
+    filas = list(iterar_filas(e3))
+    assert filas[0] == HEADER_E3
+    assert filas[1] == ["Látex ", "Habitacional", "amarillo", "Fuerte", "AO", "26.5"]
+
+
+def test_quitar_filas_repetidas(tmp_path):
+    src = experto_openpyxl(
+        tmp_path / "maestro.xlsx",
+        ["Producto", "Color", "Col1"],
+        [["Tex", "alamo", "OC-62.8"], ["Tex", "arcilla", "NE-32"], ["Tex", "alamo", "OC-62.8"], ["Tex", "alamo", "OC-1"]],
+    )
+    destino = tmp_path / "e1.xlsx"
+    assert quitar_filas_repetidas(src, destino) == (4, 1)
+    assert _filas(destino) == [
+        ["Producto", "Color", "Col1"],
+        ["Tex", "alamo", "OC-62.8"],
+        ["Tex", "arcilla", "NE-32"],
+        ["Tex", "alamo", "OC-1"],
+    ]
+    with zipfile.ZipFile(destino) as z:
+        hoja = z.read("xl/worksheets/sheet1.xml")
+        assert re.search(rb'<autoFilter ref="A1:C4"\s*/>', hoja)
+        assert b'<row r="4"' in hoja and b'<row r="5"' not in hoja
+        # la otra hoja se copia tal cual
+        with zipfile.ZipFile(src) as zs:
+            assert z.read("xl/worksheets/sheet2.xml") == zs.read("xl/worksheets/sheet2.xml")

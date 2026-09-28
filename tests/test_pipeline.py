@@ -80,12 +80,12 @@ def test_entrega_a_cada_software_su_carpeta_y_formato(tmp_path, entrada):
     generados = sorted(str(p.relative_to(filtrados)).replace("\\", "/") for p in filtrados.rglob("*") if p.is_file())
     assert generados == sorted(
         [
-            "Santint/Tiendas 14_ready.xlsx",
-            *(f"Corob_Tint/{t}_ready.xlsx" for t in TODAS),
-            "Tinwise_Lab/Tiendas 14_ready.xlsm",
-            *(f"Color_Pro3.1.1/{t}_ready.csv" for t in TODAS),
-            "Color_Pro4.8/Tiendas 14_ready.xlsx",
-            "Ibicus_Spa/Tiendas 14_ready.xlsx",
+            "Santint/Tiendas 14_ready_22_09_2026.xlsx",
+            *(f"Corob_Tint/{t}_ready_22_09_2026.xlsx" for t in TODAS),
+            "Tinwise_Lab/Tiendas 14_ready_15_09_2026.xlsm",
+            *(f"Color_Pro3.1.1/{t}_ready_07_09_2026.csv" for t in TODAS),
+            "Color_Pro4.8/Tiendas 14_ready_07_09_2026.xlsx",
+            "Ibicus_Spa/Tiendas 14_ready_07_09_2026.xlsx",
         ]
     )
     assert not (filtrados / ".staging").exists()
@@ -101,21 +101,21 @@ def test_cada_tienda_recibe_solo_sus_productos(tmp_path, entrada):
     f = out / "Archivos filtrados"
 
     # Experto 3 (Corob): Tiendas 12 lleva Habitacional + Opaco; Tiendas 14 solo Habitacional
-    t12 = _filas(f / "Corob_Tint" / "Tiendas 12_ready.xlsx", "Formulas")
+    t12 = _filas(f / "Corob_Tint" / "Tiendas 12_ready_22_09_2026.xlsx", "Formulas")
     assert t12[0] == HEADER_E3
     assert [r[2] for r in t12[1:]] == ["amarillo", "blanco", "azul"]
-    assert [r[2] for r in _filas(f / "Corob_Tint" / "Tiendas 14_ready.xlsx", "Formulas")[1:]] == ["amarillo", "azul"]
+    assert [r[2] for r in _filas(f / "Corob_Tint" / "Tiendas 14_ready_22_09_2026.xlsx", "Formulas")[1:]] == ["amarillo", "azul"]
     # la hoja IntegrityData de Experto 3 viaja con cada archivo
-    assert openpyxl.load_workbook(f / "Santint" / "Tiendas 14_ready.xlsx").sheetnames == ["Formulas", "IntegrityData"]
+    assert openpyxl.load_workbook(f / "Santint" / "Tiendas 14_ready_22_09_2026.xlsx").sheetnames == ["Formulas", "IntegrityData"]
 
     # Experto 2 (Tintwise): cantidades en cm3 tal como vienen, sin convertir
-    tw = _filas(f / "Tinwise_Lab" / "Tiendas 14_ready.xlsm", "Formulas")
+    tw = _filas(f / "Tinwise_Lab" / "Tiendas 14_ready_15_09_2026.xlsm", "Formulas")
     assert tw[1][6] == 16.3273125 and len(tw) == 2
 
     # Experto 1: Color Pro 4.8 / Ibicus en Excel, Color Pro 3.1.1 en CSV (texto "AO-26.5" intacto)
-    cp48 = _filas(f / "Color_Pro4.8" / "Tiendas 14_ready.xlsx")
+    cp48 = _filas(f / "Color_Pro4.8" / "Tiendas 14_ready_07_09_2026.xlsx")
     assert [r[4] for r in cp48[1:]] == ["amarillo", "azul"]
-    csv = (f / "Color_Pro3.1.1" / "MP14_ready.csv").read_bytes().decode("iso-8859-1").split("\r\n")
+    csv = (f / "Color_Pro3.1.1" / "MP14_ready_07_09_2026.csv").read_bytes().decode("iso-8859-1").split("\r\n")
     assert csv[0] == ",".join(HEADER_E1)
     assert csv[1:4] == [
         "Latex ,Ltx. Habitacional Ceresita,Millennium,Galon,amarillo,AO-26.5",
@@ -153,7 +153,7 @@ def test_usa_el_experto_de_fecha_mas_nueva(tmp_path, entrada):
     )
     out = tmp_path / "output"
     run_pipeline(input_dir=entrada, output_dir=out, db_path=tmp_path / "t.db")
-    colores = [r[2] for r in _filas(out / "Archivos filtrados" / "Santint" / "Tiendas 14_ready.xlsx", "Formulas")[1:]]
+    colores = [r[2] for r in _filas(out / "Archivos filtrados" / "Santint" / "Tiendas 14_ready_22_09_2026.xlsx", "Formulas")[1:]]
     assert "VIEJO" not in colores
 
 
@@ -211,3 +211,53 @@ def test_expertos_desactivados_no_se_procesan_ni_avisan(tmp_path, entrada):
     assert {gf.software for gf in summary.archivos} == {"Tinwise_Lab"}
     assert [e["item"] for e in eventos if e["fase"] == "experto_inicio"] == ["Experto 2"]
     assert not any("Experto 1" in w or "Experto 3" in w for w in summary.ingestion_warnings)
+
+
+def test_ciclo_nuevo_respalda_el_anterior_en_backups(tmp_path, entrada):
+    data = tmp_path / "data"
+    out, db = data / "output", tmp_path / "t.db"
+    run_pipeline(input_dir=entrada, output_dir=out, db_path=db)
+    filtrados = out / "Archivos filtrados"
+    primeros = sorted(p.relative_to(filtrados) for p in filtrados.rglob("*") if p.is_file())
+
+    eventos = []
+    run_pipeline(input_dir=entrada, output_dir=out, db_path=db, on_progress=eventos.append)
+
+    (respaldo,) = (data / "backups").iterdir()
+    assert sorted(p.relative_to(respaldo) for p in respaldo.rglob("*") if p.is_file()) == primeros
+    assert sorted(p.relative_to(filtrados) for p in filtrados.rglob("*") if p.is_file()) == primeros
+    assert any(e["fase"] == "mensaje" and str(respaldo) in e["mensaje"] for e in eventos)
+    session = get_session(db)
+    try:
+        primero, segundo = sorted(repository.list_batches(session), key=lambda b: b.id)
+        assert all(r.ruta.startswith(str(respaldo)) for r in repository.files_for_batch(session, primero))
+        assert all(r.ruta.startswith(str(filtrados)) for r in repository.files_for_batch(session, segundo))
+    finally:
+        session.close()
+
+
+def test_si_no_se_va_a_generar_nada_no_respalda(tmp_path, entrada):
+    out = tmp_path / "data" / "output"
+    run_pipeline(input_dir=entrada, output_dir=out, db_path=tmp_path / "t.db")
+
+    run_pipeline(input_dir=entrada, output_dir=out, db_path=tmp_path / "t.db", expertos_habilitados=set())
+
+    assert not (tmp_path / "data" / "backups").exists()
+    assert len(list((out / "Archivos filtrados").rglob("*_ready_*"))) == 12
+
+
+def test_experto_sin_fecha_en_el_nombre_usa_la_de_modificacion(tmp_path, entrada):
+    import datetime
+    import os
+
+    sin_fecha = entrada / "Experto_2.xlsm"
+    (entrada / "Experto_2_15_09_2026.xlsm").rename(sin_fecha)
+    mtime = datetime.datetime(2026, 9, 15, 12, 26).timestamp()
+    os.utime(sin_fecha, (mtime, mtime))
+    out = tmp_path / "output"
+    eventos = []
+
+    run_pipeline(input_dir=entrada, output_dir=out, db_path=tmp_path / "t.db", on_progress=eventos.append)
+
+    assert (out / "Archivos filtrados" / "Tinwise_Lab" / "Tiendas 14_ready_15_09_2026.xlsm").exists()
+    assert any(e["fase"] == "mensaje" and "Experto_2.xlsm no trae fecha" in e["mensaje"] for e in eventos)

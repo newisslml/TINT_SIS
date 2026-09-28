@@ -141,3 +141,17 @@ def test_preview_detalle_por_software_para_el_resumen(tmp_path):
         {"nombre": "Ibicus_Spa", "tiendas": ["Tiendas 14"], "formato": "excel"},
     ]
     assert prev.salida == str(cfg.output_dir / "Archivos filtrados")
+
+
+def test_preview_informa_la_fecha_de_las_salidas_de_cada_experto(tmp_path):
+    cfg = _cfg(tmp_path)
+    _completa(cfg)
+    (cfg.input_dir / "Experto_2_15_09_2026.xlsm").unlink()
+    _xlsx(cfg.input_dir / "Experto_2.xlsm", "Formulas")
+
+    prev = preview_batch(cfg)
+    fechas = {e.label: (e.fecha, e.fecha_del_nombre) for e in prev.expertos}
+    assert fechas["Experto 1"] == ("07_09_2026", True)
+    assert fechas["Experto 3"] == ("22_09_2026", True)
+    # sin fecha en el nombre: la de modificacion (hoy, recien creado)
+    assert fechas["Experto 2"][1] is False and len(fechas["Experto 2"][0]) == 10

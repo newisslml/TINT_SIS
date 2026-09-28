@@ -1,5 +1,8 @@
 * { box-sizing: border-box; }
 
+/* el atributo hidden oculta siempre, aunque la clase del elemento fije display */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -7,9 +10,14 @@ html, body {
   font-size: 14px;
   color: var(--ink);
   background: var(--bg);
-  background-image: var(--bg-grad);
-  background-attachment: fixed;
   overflow: hidden;
+}
+
+/* campos de texto: siguen el tema (en oscuro, fondo de superficie y texto claro).
+   :where() no suma especificidad, así .ruta-input y los estilos en línea mandan. */
+:where(input, select, textarea) {
+  color: var(--ink);
+  background: var(--surface);
 }
 
 /* ---------- shell ---------- */
@@ -26,8 +34,8 @@ html, body {
 }
 
 .nav {
-  background: var(--ink);
-  color: #e2e4e3;
+  background: var(--nav-bg);
+  color: var(--nav-text);
   display: flex;
   flex-direction: column;
   padding: 20px 0;
@@ -40,7 +48,7 @@ html, body {
 .nav__brand {
   position: sticky;
   top: 0;
-  background: var(--ink);
+  background: var(--nav-bg);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -55,7 +63,7 @@ html, body {
   flex: 0 0 auto;
   width: 50px;
   height: 50px;
-  color: #83e9f1;
+  color: var(--ambar);
   overflow: visible;
 }
 .rainbow-icon__arc {
@@ -93,18 +101,19 @@ html, body {
   gap: 10px;
   height: 40px;
   padding: 0 16px 0 20px;
-  color: #bfc6cc;
+  color: var(--nav-text);
   text-decoration: none;
   font-weight: 500;
   font-size: 13px;
   border-left: 3px solid transparent;
   cursor: pointer;
 }
-.nav__item:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+.nav__item:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+/* vista activa: azul Codelpa de fondo y filete ámbar (destacado/activo en codelpa.cl) */
 .nav__item.is-active {
   color: #fff;
-  background: rgba(27, 110, 118, 0.28);
-  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--azul) 45%, transparent);
+  border-left-color: var(--ambar);
 }
 .nav__item .tag--soon { margin-left: auto; }
 
@@ -155,21 +164,6 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
 .muted { color: var(--ink-muted); }
 .mono { font-family: var(--font-mono); }
 
-/* Texto suelto sobre el degradado (títulos y párrafos que no viven dentro de una tarjeta):
-   se aclara para contrastar con el fondo cian oscuro. Dentro de .card/.tabla se mantiene el color normal. */
-.view > .view__title,
-.view > .section__title {
-  color: var(--on-canvas-strong);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-.view > .muted,
-.view > .soon-view { color: var(--on-canvas-soft); }
-.view > .linklike { color: var(--on-canvas-link); }
-
-/* Fila de contexto de "Nuevo ciclo" (Homólogos activo / Experto / tiendas): también va sobre el degradado */
-.canvas-labels .muted { color: var(--on-canvas-soft); }
-.canvas-labels .mono { color: var(--on-canvas-strong); }
-
 /* ---------- card ---------- */
 .card {
   background: var(--surface);
@@ -208,21 +202,21 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   white-space: nowrap;
   border: 1px solid transparent;
 }
-/* fondo y borde derivados del token de color: cambiar el token y el chip lo sigue */
+/* color y fondo de la paleta de estados; el borde se deriva del color */
 .tag--ok {
   color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 15%, transparent);
-  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: var(--ok-bg);
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
 }
 .tag--advertencia {
   color: var(--advertencia);
-  background: color-mix(in srgb, var(--advertencia) 15%, transparent);
-  border-color: color-mix(in srgb, var(--advertencia) 40%, transparent);
+  background: var(--advertencia-bg);
+  border-color: color-mix(in srgb, var(--ambar) 60%, transparent);
 }
 .tag--error {
   color: var(--error);
-  background: color-mix(in srgb, var(--error) 15%, transparent);
-  border-color: color-mix(in srgb, var(--error) 40%, transparent);
+  background: var(--error-bg);
+  border-color: color-mix(in srgb, var(--error) 35%, transparent);
 }
 .tag--no-habilitado {
   color: var(--no-habilitado);
@@ -232,8 +226,8 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
 /* experto apagado en Configuración: rojo (mismo token que error) para que se note */
 .tag--desactivado {
   color: var(--error);
-  background: color-mix(in srgb, var(--error) 15%, transparent);
-  border-color: color-mix(in srgb, var(--error) 40%, transparent);
+  background: var(--error-bg);
+  border-color: color-mix(in srgb, var(--error) 35%, transparent);
 }
 .tag--soon {
   color: var(--no-habilitado);
@@ -257,69 +251,65 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   cursor: pointer;
   border: 1px solid transparent;
 }
+/* acción principal: azul Codelpa */
 .btn--primary {
-  background: #16a7b5;
-  color: #04262b;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 1px 3px rgba(6, 37, 51, 0.25);
 }
-.btn--primary:hover { filter: brightness(1.08); }
+.btn--primary:hover { filter: brightness(1.1); }
 .btn--secondary {
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--surface);
   color: var(--ink);
-  border-color: rgba(255, 255, 255, 0.65);
+  border-color: var(--linea);
 }
-.btn--secondary:hover { background: #ffffff; }
-/* mismo morado que el banner informativo del Inicio (.banner--info) */
-.btn--morado {
-  background: rgba(109, 40, 217, 0.92);
-  color: #e7dcff;
-  border-color: #a78bfa;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+.btn--secondary:hover {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--linea));
 }
-.btn--morado:hover { filter: brightness(1.08); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* botón "Ejecutar" de Nuevo ciclo: pegado a la derecha de la fila, ~10px más
-   grande y en verde para contrastar con el degradado del fondo */
+   grande y en el verde de estado OK para distinguirlo de las acciones azules */
 .btn--ejecutar {
   margin-left: auto;
   padding: 15px 26px;
   font-size: 15px;
-  background: #1f9d4d;
+  background: var(--ok-fill);
   color: #ffffff;
-  border-color: #1f9d4d;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  border-color: var(--ok-fill);
+  box-shadow: 0 2px 6px rgba(6, 37, 51, 0.3);
 }
-.btn--ejecutar:hover { background: #24b058; filter: brightness(1); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35); }
+.btn--ejecutar:hover { filter: brightness(1.12); box-shadow: 0 3px 10px rgba(6, 37, 51, 0.35); }
 .btn--ejecutar .rocket-icon { width: 20px; height: 20px; }
 
-/* Formato "contorno naranjo" sobre tarjeta blanca: botón "Editar" de
+/* Formato "contorno ámbar" sobre tarjeta: botón "Editar" de
    Configuración (con lápiz) y botones de Historial (sin icono). */
 .btn--edit,
 .btn--naranja {
   padding: 7px 12px;
   font-size: 13px;
-  background: #ffffff;
-  color: #b45a00;
-  border-color: #e8730c;
+  background: var(--surface);
+  color: var(--on-ambar);
+  border-color: var(--ambar);
 }
 .btn--edit:hover,
-.btn--naranja:hover { background: #fff4ea; }
+.btn--naranja:hover { background: var(--ambar-soft); }
 .btn--edit.is-active,
 .btn--naranja.is-active {
-  background: color-mix(in srgb, #e8730c 14%, #fff);
-  border-color: #e8730c;
-  color: #8a4300;
+  background: color-mix(in srgb, var(--ambar) 22%, var(--surface));
+  border-color: var(--ambar);
+  color: var(--on-ambar);
 }
 
 /* botón "Guardar" de Configuración: verde, mismo tono que "Ejecutar" */
 .btn--guardar {
-  background: #1f9d4d;
+  background: var(--ok-fill);
   color: #ffffff;
-  border-color: #1f9d4d;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  border-color: var(--ok-fill);
+  box-shadow: 0 1px 3px rgba(6, 37, 51, 0.25);
 }
-.btn--guardar:hover { background: #24b058; filter: none; }
+.btn--guardar:hover { filter: brightness(1.12); }
 .icon-pencil { width: 15px; height: 15px; flex: 0 0 auto; }
 .btn--edit:hover .icon-pencil { animation: pen-write 0.6s ease-in-out; }
 @keyframes pen-write {
@@ -333,12 +323,12 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
 
 /* rutas de Configuración: se ven igual, pero bloqueadas hasta apretar "Editar" */
 .ruta-input[readonly] {
-  background: #f4f5f5;
+  background: var(--surface-2);
   color: var(--ink-muted);
   cursor: default;
 }
 .ruta-input.is-editable {
-  background: #ffffff;
+  background: var(--surface);
   color: var(--ink);
 }
 .ruta-input.is-editable:focus {
@@ -395,7 +385,7 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
 }
 .tabla__row > * { min-width: 0; overflow-wrap: anywhere; }
 .tabla__head {
-  background: #f7f8f8;
+  background: var(--surface-2);
   color: var(--ink-muted);
   font-size: 12px;
   font-weight: 500;
@@ -435,22 +425,20 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   font-size: 13px;
   font-weight: 500;
 }
-.banner--advertencia { color: var(--advertencia); background: rgba(180, 90, 0, 0.1); border: 1px solid rgba(180, 90, 0, 0.35); }
-.banner--error { color: var(--error); background: rgba(196, 43, 43, 0.1); border: 1px solid rgba(196, 43, 43, 0.35); }
-/* aviso informativo sobre el degradado cian oscuro del Inicio: morado fuerte de fondo
-   con texto en morado claro para máximo contraste */
-.banner--info { color: #e7dcff; background: rgba(109, 40, 217, 0.92); border: 1px solid #a78bfa; }
+.banner--advertencia { color: var(--advertencia); background: var(--advertencia-bg); border: 1px solid color-mix(in srgb, var(--ambar) 60%, transparent); }
+.banner--error { color: var(--error); background: var(--error-bg); border: 1px solid color-mix(in srgb, var(--error) 35%, transparent); }
+.banner--info { color: var(--info); background: var(--info-bg); border: 1px solid color-mix(in srgb, var(--info) 35%, transparent); }
 
 .dropzone {
-  border: 1px dashed var(--linea);
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 35%, var(--linea));
   border-radius: var(--radius);
-  background: #f7f8f8;
+  background: var(--surface);
   padding: 28px;
   text-align: center;
   color: var(--ink-muted);
   cursor: pointer;
 }
-.dropzone.is-over { border-color: var(--accent); background: rgba(27, 110, 118, 0.06); }
+.dropzone.is-over { border-color: var(--accent); background: var(--accent-soft); }
 .dropzone.is-busy { opacity: 0.6; pointer-events: none; }
 
 .chip {
@@ -460,37 +448,116 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
-  color: #06363c;
-  background: #83e9f1;
-  border: 1px solid #ffffff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
-/* variante "activo/habilitado" (ej. tiendas habilitadas en Nuevo ciclo): mismo
-   token --ok que .tag--ok, para que el verde de "habilitado" sea consistente
-   en toda la app. */
+/* variante "activo/habilitado" (ej. tiendas habilitadas en Nuevo ciclo): el
+   mismo verde de estado OK, para que "habilitado" se vea igual en toda la app. */
 .chip--ok {
   color: #ffffff;
-  background: var(--ok);
-  border-color: var(--ok);
+  background: var(--ok-fill);
+  border-color: var(--ok-fill);
+}
+
+/* punto de color por experto (Nuevo ciclo); el color sale de --experto-N */
+.experto-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  flex: none;
 }
 
 .log {
-  background: var(--ink);
+  background: var(--log-bg);
   border-radius: 8px;
   padding: 14px;
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #8a94a0;
+  color: var(--log-text);
   display: flex;
   flex-direction: column;
   gap: 3px;
   max-height: 180px;
   overflow-y: auto;
 }
-.log__line:first-child { color: #e2e4e3; }
+.log__line:first-child { color: var(--log-text-strong); }
 
 .checklist { display: flex; flex-direction: column; gap: 8px; }
 .checklist label { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- Nuevo ciclo: panel del archivo maestro (preparacion.js) ---------- */
+.preparacion { display: flex; flex-direction: column; gap: 24px; }
+.detalle-analisis > summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+.detalle-analisis__cuerpo { display: flex; flex-direction: column; gap: 24px; margin-top: 16px; }
+
+/* ---------- Homólogos: tabla de productos ---------- */
+.guardar-barra {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--advertencia);
+  background: var(--advertencia-bg);
+  border: 1px solid color-mix(in srgb, var(--ambar) 60%, transparent);
+}
+.guardar-barra--info { color: var(--info); background: var(--info-bg); border-color: color-mix(in srgb, var(--info) 35%, transparent); }
+.guardar-barra--error { color: var(--error); background: var(--error-bg); border-color: color-mix(in srgb, var(--error) 35%, transparent); }
+.prod-grupo__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.prod-fila {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.2fr) minmax(300px, 2.2fr) minmax(180px, 1.1fr) auto;
+  gap: 10px 16px;
+  align-items: start;
+  padding: 12px 0;
+  border-top: 1px solid var(--linea);
+}
+.prod-fila > * { min-width: 0; }
+.prod-fila--head { padding: 4px 0; border-top: none; font-size: 12px; font-weight: 600; color: var(--ink-muted); }
+.prod-fila__meta { font-size: 12px; color: var(--ink-muted); overflow-wrap: anywhere; }
+.exp-campo { display: grid; grid-template-columns: 30px 1fr minmax(90px, auto); gap: 8px; align-items: center; }
+.exp-campo--linea { grid-template-columns: 30px 1fr; }
+.exp-campo__label { font-size: 11px; font-weight: 700; color: var(--ink-muted); }
+.exp-campo__cuenta { font-size: 12px; white-space: nowrap; color: var(--ink-muted); }
+.sin-asignar {
+  display: grid;
+  grid-template-columns: 30px 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid var(--linea);
+  font-size: 14px;
+}
+.form-campo { display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center; font-size: 13px; }
+.form-campo__label { color: var(--ink-muted); }
+.btn--chico { padding: 5px 10px; font-size: 12px; }
+
+/* tiendas y nombres de cada producto nuevo */
+.checks-inline { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.checks-inline label { display: flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.campo { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px; }
+.campo__label { font-size: 12px; color: var(--ink-muted); }
+.input-texto {
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 5px 8px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+}
+.input-texto:focus { outline: none; border-color: var(--accent); }
+.input-texto:disabled { color: var(--ink-muted); background: transparent; }
 
 /* ---------- interruptor on/off (Configuración: tiendas y expertos habilitados) ----------
    Es un checkbox real con otra apariencia: teclado, foco y lectores de pantalla
@@ -519,9 +586,9 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   transition: transform 0.15s ease;
 }
-.switch__input:checked + .switch__track { background: var(--ok); }
+.switch__input:checked + .switch__track { background: var(--ok-fill); }
 .switch__input:checked + .switch__track::after { transform: translateX(18px); }
-.switch__input:focus-visible + .switch__track { outline: 2px solid var(--ok); outline-offset: 2px; }
+.switch__input:focus-visible + .switch__track { outline: 2px solid var(--accent); outline-offset: 2px; }
 .switch__estado { width: 30px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink-muted); }
 .switch__estado::before { content: "OFF"; }
 .switch__input:checked ~ .switch__estado { color: var(--ok); }
@@ -563,7 +630,7 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(4, 20, 24, 0.55);
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -591,6 +658,7 @@ h2.section__title { font-size: 18px; line-height: 1.3; margin: 0; font-weight: 6
 .resumen__label { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted); }
 .resumen__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .resumen__experto { border: 1px solid var(--linea); border-radius: 6px; padding: 10px 12px; }
+.resumen__fecha { margin-top: 2px; font-size: 12px; color: var(--ink-muted); }
 .resumen__lista { margin: 6px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
 .resumen__pie { font-size: 12px; color: var(--ink-muted); border-top: 1px solid var(--linea); padding-top: 10px; }
 .modal__actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }

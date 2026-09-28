@@ -72,6 +72,79 @@ def _cmd_productos_init(args, cfg) -> None:
     print("Revisala en Excel (columna 'Revisar' y hoja 'Sin asignar') antes de correr el ciclo.")
 
 
+def _cmd_preparar(args, cfg) -> None:
+    from tint_sis.adapters.sheet_filter import FormatoExpertoError
+    from tint_sis.preparar import DecisionNuevo, PreparacionError, analizar_maestro, preparar_expertos
+
+    if args.input:
+        cfg.input_dir = Path(args.input)
+    if args.output:
+        cfg.output_dir = Path(args.output)
+
+    def progreso(ev: dict) -> None:
+        if ev.get("fase") == "etapa":
+            print(f"  {ev.get('etapa')}...")
+
+    try:
+        analisis = analizar_maestro(Path(args.maestro), cfg, on_progress=progreso)
+    except FormatoExpertoError as exc:
+        sys.exit(f"No se pudo analizar: {exc}")
+
+    miles = lambda n: f"{n:,}".replace(",", ".")  # noqa: E731
+    print(f"\nMaestro: {analisis.maestro}  (ciclo {analisis.fecha.replace('_', '/')})")
+    print(f"  formulas: {miles(analisis.filas)}  distintas: {miles(analisis.filas_unicas)}  "
+          f"repetidas: {miles(analisis.repetidas)}  productos: {analisis.productos}")
+    print(f"Comparado con: {analisis.anterior or '(no hay Experto 1 anterior)'}")
+    print(f"  formulas agregadas: {miles(analisis.filas_agregadas)}  quitadas: {miles(analisis.filas_quitadas)}  "
+          f"productos sin cambios: {analisis.sin_cambios}")
+    print(f"\nProductos nuevos: {len(analisis.nuevos)}")
+    for n in analisis.nuevos:
+        print(f"  - {n.linea} / {n.producto}: {miles(n.filas)} formulas"
+              + (f" ({miles(n.repetidas)} repetidas quitadas)" if n.repetidas else ""))
+    for c in analisis.cambios:
+        print(f"  cambia {c.producto}: {miles(c.antes)} -> {miles(c.ahora)} (+{c.agregadas} / -{c.quitadas})")
+    for q in analisis.quitados:
+        print(f"  ya no viene {q['producto']} ({miles(q['filas'])} formulas)")
+    for e in analisis.expertos:
+        print(f"{e.label}: {e.archivo or '(no se genera)'}" + (f"  entran: {', '.join(e.entran)}" if e.entran else ""))
+    for w in analisis.advertencias:
+        print(f"  aviso: {w}")
+    for b in analisis.bloqueantes:
+        print(f"  BLOQUEA: {b}")
+
+    if args.solo_analizar:
+        return
+    if not analisis.puede_preparar:
+        sys.exit("No se puede preparar (ver BLOQUEA arriba).")
+    if analisis.nuevos and args.tiendas is None:
+        sys.exit("Hay productos nuevos: indicar a que tiendas van con --tiendas (p. ej. --tiendas todas, "
+                 "--tiendas \"MP14,MP12\" o --tiendas ninguna).")
+    if args.tiendas is None or args.tiendas.strip().lower() == "todas":
+        tiendas = list(analisis.tiendas)
+    elif args.tiendas.strip().lower() == "ninguna":
+        tiendas = []
+    else:
+        tiendas = [t.strip() for t in args.tiendas.split(",") if t.strip()]
+        desconocidas = [t for t in tiendas if t not in analisis.tiendas]
+        if desconocidas:
+            sys.exit(f"Tiendas que no estan en la tabla: {', '.join(desconocidas)} (hay: {', '.join(analisis.tiendas)})")
+    decisiones = {n.clave: DecisionNuevo(tiendas, n.nombre_e2, n.nombre_e3) for n in analisis.nuevos}
+    print("\nPreparando...")
+    try:
+        r = preparar_expertos(analisis, cfg, decisiones, on_progress=progreso)
+    except PreparacionError as exc:
+        sys.exit(str(exc))
+    print("\nGenerados:")
+    for a in r.archivos:
+        print(f"  {a.label}: {a.ruta} ({miles(a.filas)} formulas)")
+    print(f"Tabla de productos: {r.tabla} (+{len(r.productos_agregados)} productos, "
+          f"{r.nombres_completados} nombres completados)")
+    print(f"Backup del ciclo anterior: {r.backup}")
+    print(f"Resumen: {r.resumen_xlsx}")
+    for w in r.advertencias:
+        print(f"  aviso: {w}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="tint_sis")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -95,12 +168,27 @@ def main() -> None:
     init_parser.add_argument("--salida", default=None, help="default: <input>/productos_TINT.xlsx")
     init_parser.add_argument("--force", action="store_true", help="regenerar aunque ya exista (pisa la revisada)")
 
+    prep_parser = subparsers.add_parser(
+        "preparar",
+        help="Archivo maestro de tintometria -> Experto 1/2/3 del ciclo + productos nuevos en la tabla",
+    )
+    prep_parser.add_argument("maestro", help="archivo maestro (formato Experto 1, .xlsx)")
+    prep_parser.add_argument(
+        "--tiendas", default=None,
+        help='tiendas de los productos nuevos: "todas", "ninguna" o una lista "MP14,MP12" (obligatorio si hay nuevos)',
+    )
+    prep_parser.add_argument("--solo-analizar", action="store_true", help="mostrar el resumen sin escribir nada")
+    prep_parser.add_argument("--input", default=None, help="carpeta de entrada (default: config)")
+    prep_parser.add_argument("--output", default=None, help="carpeta base de salida (default: config)")
+
     args = parser.parse_args()
     cfg = load_config()
     if args.command == "run":
         _cmd_run(args, cfg)
     elif args.command == "productos-init":
         _cmd_productos_init(args, cfg)
+    elif args.command == "preparar":
+        _cmd_preparar(args, cfg)
 
 
 if __name__ == "__main__":

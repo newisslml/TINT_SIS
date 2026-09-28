@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { h, btn, tag, tabla, modal } from "../dom.js";
+import { crearPreparacion, PREPARACION_PENDIENTE } from "../preparacion.js";
 
 // Icono "cohete" para el botón Ejecutar. viewBox 0 0 32 32; las partes con la
 // clase .rocket-upper despegan juntas y .rocket-flame es la llama del empuje.
@@ -34,6 +35,17 @@ const ESTADO_TAG = {
 
 const FORMATO = { csv: "CSV", excel: "Excel" };
 
+// Punto con el color del experto ("Experto 2" -> --experto-2); gris si no hay token.
+// Fecha con que salen los archivos del experto (<tienda>_ready_<fecha>); si el
+// nombre del experto no la trae, es su fecha de modificación.
+const fechaSalida = (e) =>
+  e.fecha ? `_ready_${e.fecha}` + (e.fecha_del_nombre ? "" : " (fecha de modificación: el nombre no trae fecha)") : "";
+
+const expertoDot = (label) => {
+  const n = (String(label).match(/\d+/) || [""])[0];
+  return h("span", { class: "experto-dot", style: `background:var(--experto-${n}, var(--no-habilitado))`, "aria-hidden": "true" });
+};
+
 // Resumen que se confirma antes de ejecutar: tiendas que se filtran, expertos
 // activos (archivo -> softwares -> tiendas) y lo que queda afuera del ciclo.
 function resumenCiclo(d) {
@@ -58,7 +70,8 @@ function resumenCiclo(d) {
         h(
           "div",
           { class: "resumen__experto" },
-          h("div", {}, h("strong", {}, e.label), "  ·  ", h("span", { class: "mono" }, e.archivo)),
+          h("div", {}, expertoDot(e.label), h("strong", {}, e.label), "  ·  ", h("span", { class: "mono" }, e.archivo)),
+          h("div", { class: "resumen__fecha" }, "Archivos ", h("span", { class: "mono" }, fechaSalida(e))),
           h(
             "ul",
             { class: "resumen__lista" },
@@ -94,6 +107,15 @@ export async function render(view, { navigate }) {
   let data = await api.preview();
 
   view.append(h("h1", { class: "view__title" }, "Nuevo ciclo — cargar y revisar"));
+  view.append(
+    h(
+      "p",
+      { class: "muted", style: "margin:0" },
+      "Arrastrá el archivo maestro que envía tintometría (el experto padre completo). TINT_SIS lo compara con el " +
+        "ciclo anterior, suma los productos nuevos a la tabla de productos y genera Experto 1, 2 y 3; después " +
+        "revisás los expertos del ciclo y ejecutás."
+    )
+  );
 
   // ---------- dropzone real ----------
   const fileInput = h("input", { type: "file", accept: ".xlsx,.xlsm", style: "display:none" });
@@ -115,8 +137,12 @@ export async function render(view, { navigate }) {
   const dz = h(
     "div",
     { class: "dropzone" },
-    h("div", { style: "font-weight:600;color:var(--ink)" }, "Arrastrá un archivo .xlsx o .xlsm acá"),
-    h("div", {}, "o hacé clic para elegirlo — se copia a la carpeta de entrada"),
+    h("div", { style: "font-weight:600;color:var(--ink)" }, "Arrastrá acá el archivo maestro (.xlsx)"),
+    h(
+      "div",
+      {},
+      "o hacé clic para elegirlo — se analiza en alrededor de un minuto. Un Experto_1/2/3 o la tabla de productos se copian tal cual a la carpeta de entrada."
+    ),
     addIcon,
     fileInput
   );
@@ -124,13 +150,32 @@ export async function render(view, { navigate }) {
     data = await api.preview();
     rerender();
   };
+
+  // ---------- archivo maestro -> Experto 1, 2 y 3 ----------
+  // Mientras hay un maestro en curso (analizándose, analizado sin preparar o
+  // preparándose) no se ejecuta el ciclo; al quedar listos los expertos se relee
+  // la carpeta de entrada.
+  let estadoMaestro = "idle";
+  let dyn = null; // contexto + tablas + acciones (se arma después del primer estado del maestro)
+  const prep = crearPreparacion({
+    alCambiarEstado: async (estado) => {
+      estadoMaestro = estado;
+      if (estado === "listo") data = await api.preview();
+      if (dyn) rerender();
+    },
+  });
+
   const upload = async (file) => {
     if (!file) return;
     dz.classList.add("is-busy");
     try {
       const res = await api.uploadInput(file);
-      data = res.preview;
-      rerender();
+      if (res.tipo === "maestro") {
+        prep.mostrar(res.preparar);
+      } else {
+        data = res.preview;
+        rerender();
+      }
     } catch (e) {
       alert("No se pudo subir el archivo: " + e.message);
     } finally {
@@ -149,19 +194,21 @@ export async function render(view, { navigate }) {
     dz.classList.remove("is-over");
     upload(e.dataTransfer.files[0]);
   });
-  view.append(dz);
+  view.append(dz, prep.el);
 
   // ---------- contexto + tabla + acciones (rerender) ----------
-  const dyn = h("div", { style: "display:flex;flex-direction:column;gap:24px" });
+  await prep.refrescar();
+  dyn = h("div", { style: "display:flex;flex-direction:column;gap:24px" });
   view.append(dyn);
 
   function rerender() {
     dyn.replaceChildren();
+    const maestroPendiente = PREPARACION_PENDIENTE.has(estadoMaestro);
 
     dyn.append(
       h(
         "div",
-        { class: "row canvas-labels", style: "align-items:center" },
+        { class: "row", style: "align-items:center" },
         h("span", { class: "muted" }, "Tabla de productos:"),
         h("span", { class: "mono" }, data.productos_activo || "— (falta)"),
         ...data.tiendas_habilitadas.map((t) => h("span", { class: "chip chip--ok" }, t))
@@ -182,8 +229,9 @@ export async function render(view, { navigate }) {
               h(
                 "div",
                 {},
-                h("div", { style: "font-weight:500" }, e.label),
-                h("div", { class: "mono muted", style: "font-size:12px" }, e.archivo || "falta en la carpeta de entrada")
+                h("div", { style: "font-weight:500" }, expertoDot(e.label), e.label),
+                h("div", { class: "mono muted", style: "font-size:12px" }, e.archivo || "falta en la carpeta de entrada"),
+                e.fecha ? h("div", { class: "muted", style: "font-size:12px" }, "Salen como ", h("span", { class: "mono" }, fechaSalida(e))) : null
               ),
               e.softwares.join(", "),
               e.estado === "ok"
@@ -225,10 +273,21 @@ export async function render(view, { navigate }) {
     for (const a of data.advertencias || []) {
       dyn.append(h("div", { class: "banner banner--info" }, a));
     }
+    if (maestroPendiente) {
+      dyn.append(
+        h(
+          "div",
+          { class: "banner banner--advertencia" },
+          estadoMaestro === "analizado"
+            ? "Hay un archivo maestro analizado: prepará los expertos (o descartalo) arriba antes de ejecutar el ciclo."
+            : "Se está procesando el archivo maestro: el ciclo se puede ejecutar cuando estén listos los expertos."
+        )
+      );
+    }
 
     const ejecutar = btn("Ejecutar", {
       variant: "primary",
-      disabled: !data.puede_ejecutar,
+      disabled: !data.puede_ejecutar || maestroPendiente,
       onClick: async () => {
         if (ejecutar.classList.contains("is-launching")) return;
         // se relee la carpeta por si cambio algo desde que se abrio la vista
@@ -284,4 +343,5 @@ export async function render(view, { navigate }) {
   }
 
   rerender();
+  return () => prep.destruir();
 }

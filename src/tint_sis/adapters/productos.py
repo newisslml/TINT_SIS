@@ -29,7 +29,9 @@ marcados para revisar).
 from __future__ import annotations
 
 import difflib
+import os
 import re
+import shutil
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
@@ -129,6 +131,313 @@ def leer_tabla(path: Path, expertos: Iterable[str] = tuple(EXPERTOS)) -> TablaPr
         return TablaProductos(
             tiendas=[t for t, _ in cols_tienda], rutas=rutas, productos=productos, advertencias=advertencias
         )
+    finally:
+        wb.close()
+
+
+@dataclass
+class FilaTabla:
+    """Una fila de la hoja Productos, tal como esta escrita."""
+
+    fila: int
+    linea: str | None
+    producto: str | None
+    nombres: dict[str, list[str]]  # experto -> nombres (separados por ";")
+    tiendas: set[str]
+
+
+def _columnas_tabla(encabezado: tuple, expertos: Iterable[str]) -> tuple[dict[str, int], list[tuple[str, int]]]:
+    """(columna fija/experto -> indice, [(tienda, indice)])."""
+    fijas = {normalizar(c): c for c in (*COLUMNAS_FIJAS, *COLUMNAS_INFO)}
+    por_experto = {normalizar(e): e for e in expertos}
+    cols: dict[str, int] = {}
+    tiendas: list[tuple[str, int]] = []
+    for idx, valor in enumerate(encabezado):
+        if valor is None or not str(valor).strip():
+            continue
+        clave = normalizar(valor)
+        if clave in fijas:
+            cols.setdefault(fijas[clave], idx)
+        elif clave in por_experto:
+            cols.setdefault(por_experto[clave], idx)
+        else:
+            tiendas.append((str(valor).strip(), idx))
+    return cols, tiendas
+
+
+def leer_filas_tabla(path: Path, expertos: Iterable[str] = tuple(EXPERTOS)) -> tuple[list[str], list[FilaTabla]]:
+    """(tiendas, filas) de la hoja Productos, para saber como se llama cada
+    producto en cada experto (leer_tabla solo arma las rutas del filtro)."""
+    expertos = tuple(expertos)
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        ws = wb[HOJA_PRODUCTOS] if HOJA_PRODUCTOS in wb.sheetnames else wb[wb.sheetnames[0]]
+        filas = ws.iter_rows(values_only=True)
+        cols, cols_tienda = _columnas_tabla(next(filas, None) or (), expertos)
+        out: list[FilaTabla] = []
+        for n, fila in enumerate(filas, start=2):
+            if not fila or all(v is None or not str(v).strip() for v in fila):
+                continue
+
+            def celda(nombre: str) -> object:
+                i = cols.get(nombre)
+                return fila[i] if i is not None and i < len(fila) else None
+
+            nombres = {}
+            for e in expertos:
+                valor = celda(e)
+                if valor is not None:
+                    partes = [p.strip() for p in str(valor).split(SEPARADOR_NOMBRES) if p.strip()]
+                    if partes:
+                        nombres[e] = partes
+            out.append(
+                FilaTabla(
+                    fila=n,
+                    linea=None if celda(COL_LINEA) is None else str(celda(COL_LINEA)).strip(),
+                    producto=None if celda(COL_PRODUCTO) is None else str(celda(COL_PRODUCTO)).strip(),
+                    nombres=nombres,
+                    tiendas={t for t, i in cols_tienda if i < len(fila) and _marcado(fila[i])},
+                )
+            )
+        return [t for t, _ in cols_tienda], out
+    finally:
+        wb.close()
+
+
+@dataclass
+class ProductoAgregado:
+    linea: str
+    producto: str
+    nombres: dict[str, str]  # experto -> nombre
+    tiendas: set[str]
+
+
+def actualizar_tabla(
+    origen: Path,
+    destino: Path,
+    nuevos: list[ProductoAgregado],
+    completar: Mapping[int, Mapping[str, str]],
+    nota: str,
+) -> None:
+    """Escribe en `destino` la tabla `origen` con los productos `nuevos`
+    agregados al final y, en las filas existentes, los nombres de `completar`
+    (fila -> experto -> nombre) en las celdas de experto que estaban vacias. Las
+    filas tocadas llevan `nota` en Revisar. Las demas hojas quedan igual."""
+    wb = openpyxl.load_workbook(origen)
+    try:
+        ws = wb[HOJA_PRODUCTOS] if HOJA_PRODUCTOS in wb.sheetnames else wb[wb.sheetnames[0]]
+        encabezado = tuple(c.value for c in ws[1])
+        cols, cols_tienda = _columnas_tabla(encabezado, EXPERTOS)
+        faltan = [c for c in (COL_LINEA, COL_PRODUCTO, *EXPERTOS) if c not in cols]
+        if faltan:
+            raise ValueError(f"{Path(origen).name}: la hoja Productos no tiene la(s) columna(s) {', '.join(faltan)}")
+        col_revisar = cols.get(COL_REVISAR)
+        if col_revisar is None:
+            col_revisar = len(encabezado)
+            ws.cell(row=1, column=col_revisar + 1, value=COL_REVISAR)
+
+        def anotar(fila: int) -> None:
+            celda = ws.cell(row=fila, column=col_revisar + 1)
+            previo = str(celda.value).strip() if celda.value else ""
+            celda.value = f"{previo}; {nota}" if previo else nota
+
+        for fila, nombres in completar.items():
+            tocada = False
+            for experto, nombre in nombres.items():
+                celda = ws.cell(row=fila, column=cols[experto] + 1)
+                if celda.value is None or not str(celda.value).strip():
+                    celda.value = nombre
+                    tocada = True
+            if tocada:
+                anotar(fila)
+
+        centro = Alignment(horizontal="center")
+        # ultima fila con algun valor (max_row cuenta tambien filas vacias con formato)
+        ultima = ws.max_row
+        while ultima > 1 and all(c.value is None or not str(c.value).strip() for c in ws[ultima]):
+            ultima -= 1
+        for fila, p in enumerate(nuevos, start=ultima + 1):
+            ws.cell(row=fila, column=cols[COL_LINEA] + 1, value=p.linea)
+            ws.cell(row=fila, column=cols[COL_PRODUCTO] + 1, value=p.producto)
+            for experto, nombre in p.nombres.items():
+                ws.cell(row=fila, column=cols[experto] + 1, value=nombre)
+            for tienda, idx in cols_tienda:
+                if tienda in p.tiendas:
+                    celda = ws.cell(row=fila, column=idx + 1, value=MARCA)
+                    celda.alignment = centro
+            anotar(fila)
+        if nuevos and ws.auto_filter.ref:
+            ws.auto_filter.ref = ws.dimensions
+        Path(destino).parent.mkdir(parents=True, exist_ok=True)
+        wb.save(destino)
+    finally:
+        wb.close()
+
+
+# --------------------------------------------------------------------------- #
+# edicion desde la app (vista Homologos)
+# --------------------------------------------------------------------------- #
+class TablaCambiadaError(Exception):
+    """La tabla cambio en disco desde que se leyo para editar (p. ej. se la
+    edito en Excel): no se pisa, hay que recargar."""
+
+
+def version_tabla(path: Path) -> str:
+    """Identifica la version en disco de la tabla (para no pisar cambios hechos
+    en Excel mientras se editaba en la app)."""
+    return str(Path(path).stat().st_mtime_ns)
+
+
+def leer_para_editar(path: Path) -> dict:
+    """La hoja Productos para el editor: {tiendas, version, filas}, cada fila con
+    su numero de fila en el archivo (`id`), SUBP, Linea, Producto, el nombre en
+    cada experto (texto de la celda, varios nombres separados por ";"), las
+    tiendas marcadas y Revisar."""
+    path = Path(path)
+    version = version_tabla(path)
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        ws = wb[HOJA_PRODUCTOS] if HOJA_PRODUCTOS in wb.sheetnames else wb[wb.sheetnames[0]]
+        filas = ws.iter_rows(values_only=True)
+        cols, cols_tienda = _columnas_tabla(next(filas, None) or (), EXPERTOS)
+        out = []
+        for n, fila in enumerate(filas, start=2):
+            if not fila or all(v is None or not str(v).strip() for v in fila):
+                continue
+
+            def texto(nombre: str) -> str:
+                i = cols.get(nombre)
+                v = fila[i] if i is not None and i < len(fila) else None
+                return "" if v is None else str(v).strip()
+
+            out.append(
+                {
+                    "id": n,
+                    "subp": texto(COL_SUBP),
+                    "linea": texto(COL_LINEA),
+                    "producto": texto(COL_PRODUCTO),
+                    "nombres": {e: texto(e) for e in EXPERTOS},
+                    "tiendas": [t for t, i in cols_tienda if i < len(fila) and _marcado(fila[i])],
+                    "revisar": texto(COL_REVISAR),
+                }
+            )
+        return {"tiendas": [t for t, _ in cols_tienda], "version": version, "filas": out}
+    finally:
+        wb.close()
+
+
+def _validar_edicion(filas: list[dict], tiendas: list[str]) -> list[str]:
+    errores: list[str] = []
+    donde: dict[tuple[str, str], str] = {}
+    for f in filas:
+        producto = str(f.get("producto") or "").strip()
+        if not producto:
+            errores.append("Hay un producto sin nombre (columna Producto)")
+            continue
+        desconocidas = [t for t in f.get("tiendas") or [] if t not in tiendas]
+        if desconocidas:
+            errores.append(f"{producto}: tiendas que no estan en la tabla ({', '.join(desconocidas)})")
+        for experto in EXPERTOS:
+            for nombre in str((f.get("nombres") or {}).get(experto) or "").split(SEPARADOR_NOMBRES):
+                clave = normalizar(nombre)
+                if not clave:
+                    continue
+                otro = donde.get((experto, clave))
+                if otro is not None and otro != producto:
+                    errores.append(f"'{nombre.strip()}' ({experto}) esta en dos productos: {otro} y {producto}")
+                donde[(experto, clave)] = producto
+    return errores
+
+
+def guardar_edicion(
+    path: Path, filas: list[dict], *, version: str | None, respaldo_dir: Path, nota_nuevas: str | None = None
+) -> Path:
+    """Reescribe la hoja Productos con `filas` (mismo formato que
+    `leer_para_editar`; las que no traen `id` son nuevas) en ese orden. Las
+    filas que no vienen se eliminan. Notas y el resto de las hojas se conservan;
+    Revisar se conserva salvo en las filas nuevas, que llevan `nota_nuevas`.
+
+    Antes de escribir copia la tabla a `respaldo_dir` y devuelve esa copia.
+    Lanza TablaCambiadaError si la tabla cambio en disco desde `version`,
+    ValueError si hay filas invalidas (producto sin nombre, un mismo nombre de
+    experto en dos productos) y PermissionError si esta abierta en Excel."""
+    path = Path(path)
+    if version is not None and version != version_tabla(path):
+        raise TablaCambiadaError(
+            f"{path.name} cambió en disco desde que se abrió (¿se editó en Excel?): recargá la vista"
+        )
+    wb = openpyxl.load_workbook(path)
+    try:
+        ws = wb[HOJA_PRODUCTOS] if HOJA_PRODUCTOS in wb.sheetnames else wb[wb.sheetnames[0]]
+        encabezado = tuple(c.value for c in ws[1])
+        cols, cols_tienda = _columnas_tabla(encabezado, EXPERTOS)
+        tiendas = [t for t, _ in cols_tienda]
+        errores = _validar_edicion(filas, tiendas)
+        if errores:
+            raise ValueError("; ".join(dict.fromkeys(errores)))
+        for nombre in (COL_LINEA, COL_PRODUCTO, *EXPERTOS):
+            if nombre not in cols:
+                raise ValueError(f"{path.name}: la hoja Productos no tiene la columna {nombre}")
+        col_revisar = cols.get(COL_REVISAR)
+        if col_revisar is None:
+            col_revisar = len(encabezado)
+            ws.cell(row=1, column=col_revisar + 1, value=COL_REVISAR)
+        ancho = max(len(encabezado), col_revisar + 1)
+        originales = {
+            n: [ws.cell(row=n, column=c + 1).value for c in range(ancho)] for n in range(2, ws.max_row + 1)
+        }
+        if ws.max_row > 1:
+            ws.delete_rows(2, ws.max_row - 1)
+
+        centro = Alignment(horizontal="center")
+        indices_tienda = {i for _, i in cols_tienda}
+        for r, f in enumerate(filas, start=2):
+            previa = originales.get(f.get("id")) if f.get("id") else None
+            valores = list(previa) if previa else [None] * ancho
+
+            def poner(nombre_col: str, valor: object) -> None:
+                i = cols.get(nombre_col)
+                if i is not None:
+                    valores[i] = valor if valor not in ("", None) else None
+
+            poner(COL_SUBP, str(f.get("subp") or "").strip())
+            poner(COL_LINEA, str(f.get("linea") or "").strip())
+            poner(COL_PRODUCTO, str(f.get("producto") or "").strip())
+            for experto in EXPERTOS:
+                poner(experto, str((f.get("nombres") or {}).get(experto) or "").strip())
+            marcadas = set(f.get("tiendas") or [])
+            for tienda, i in cols_tienda:
+                valores[i] = MARCA if tienda in marcadas else None
+            if not previa and nota_nuevas:
+                valores[col_revisar] = nota_nuevas
+            for c, valor in enumerate(valores):
+                celda = ws.cell(row=r, column=c + 1, value=valor)
+                if c in indices_tienda:
+                    celda.alignment = centro
+        if ws.auto_filter.ref:
+            ws.auto_filter.ref = f"A1:{get_column_letter(ancho)}{max(1, len(filas) + 1)}"
+
+        respaldo_dir = Path(respaldo_dir)
+        respaldo_dir.mkdir(parents=True, exist_ok=True)
+        respaldo = respaldo_dir / path.name
+        n = 2
+        while respaldo.exists():
+            respaldo = respaldo_dir / f"{path.stem}_{n}{path.suffix}"
+            n += 1
+        shutil.copy2(path, respaldo)
+        # se escribe al lado del respaldo y se reemplaza de una vez (si la tabla
+        # esta abierta en Excel, os.replace falla y queda la anterior intacta)
+        temporal = respaldo_dir / f".guardando_{path.name}"
+        try:
+            wb.save(temporal)
+            os.replace(temporal, path)
+        except PermissionError:
+            respaldo.unlink(missing_ok=True)
+            raise
+        finally:
+            if temporal.exists():
+                temporal.unlink()
+        return respaldo
     finally:
         wb.close()
 

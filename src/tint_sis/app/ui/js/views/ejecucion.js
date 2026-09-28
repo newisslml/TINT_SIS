@@ -107,7 +107,7 @@ export async function render(view, { navigate }) {
         h(
           "div",
           { class: "banner banner--info" },
-          "Ciclo cancelado. Los softwares de los expertos que ya habían terminado quedaron en <salida>/Archivos filtrados/<Software>/; el resto no se generó."
+          "Ciclo cancelado. Los softwares de los expertos que ya habían terminado quedaron en <salida>/Archivos filtrados/<Software>/; el resto no se generó. Los archivos del ciclo anterior, si había, quedaron en la carpeta backups (ver Historial)."
         )
       );
       footer.replaceChildren(

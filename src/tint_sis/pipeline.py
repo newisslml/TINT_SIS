@@ -8,6 +8,7 @@ from pathlib import Path
 from tint_sis.adapters.passthrough_csv import write_passthrough_csv
 from tint_sis.adapters.productos import leer_tabla
 from tint_sis.adapters.sheet_filter import FormatoExpertoError, filtrar_libro
+from tint_sis.backups import carpeta_backups, respaldar_filtrados
 from tint_sis.db import repository
 from tint_sis.db.database import DEFAULT_DB_PATH, get_session
 from tint_sis.expertos import (
@@ -18,7 +19,7 @@ from tint_sis.expertos import (
     SOFTWARES_DEFAULT,
     SoftwareDef,
 )
-from tint_sis.routing import find_latest_expert, matching_files
+from tint_sis.routing import fecha_experto, find_latest_expert, matching_files
 
 ProgressCallback = Callable[[dict], None]
 
@@ -129,11 +130,18 @@ def run_pipeline(
     expertos_globs: Mapping[str, str] | None = None,
     softwares: Iterable[SoftwareDef] | None = None,
     filtrados_dirname: str = FILTRADOS_DIRNAME,
+    backups_dir: Path | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> PipelineSummary:
     """Filtra cada archivo experto por tienda segun la tabla de productos y
     entrega a cada software sus archivos en
-    <output_dir>/<filtrados_dirname>/<Software>/<tienda>_ready.<ext>.
+    <output_dir>/<filtrados_dirname>/<Software>/<tienda>_ready_<DD_MM_YYYY>.<ext>, con la
+    fecha del experto que lo alimenta (routing.fecha_experto).
+
+    Antes de generar, lo que dejo el ciclo anterior en esa carpeta se mueve a
+    `backups_dir` (default <output_dir>/../backups)/<fecha del ultimo ciclo>/
+    (backups.respaldar_filtrados). Si algo no se puede mover (abierto en Excel)
+    se lanza RespaldoError sin generar nada.
 
     Cada experto se lee una sola vez (sheet_filter.filtrar_libro) y genera el
     libro filtrado de cada tienda que necesitan sus softwares; los softwares en
@@ -170,8 +178,20 @@ def run_pipeline(
 
     session = get_session(db_path)
     try:
-        batch = repository.create_batch(session, origen_dir=str(input_dir))
         _emit(on_progress, fase="inicio", total=len(trabajos), mensaje="Filtro por productos")
+        # solo si el ciclo va a generar algo: si no, lo del ciclo anterior queda donde esta
+        if trabajos:
+            respaldo = respaldar_filtrados(
+                filtrados,
+                Path(backups_dir) if backups_dir else carpeta_backups(output_dir),
+                session,
+                excluir=(STAGING_DIRNAME,),
+            )
+            if respaldo is not None:
+                aviso = f"Archivos del ciclo anterior movidos a {respaldo}"
+                print(aviso)
+                _emit(on_progress, fase="mensaje", mensaje=aviso)
+        batch = repository.create_batch(session, origen_dir=str(input_dir))
 
         for indice, trabajo in enumerate(trabajos, start=1):
             _procesar_experto(
@@ -226,6 +246,14 @@ def _procesar_experto(
         mensaje=f"{experto}: filtrando {archivo.name} para {', '.join(trabajo.tiendas)}",
         **base,
     )
+    fecha, del_nombre = fecha_experto(archivo)
+    if not del_nombre:
+        aviso = (
+            f"{archivo.name} no trae fecha en el nombre (_DD_MM_AAAA): sus archivos salen "
+            f"con la fecha de modificacion, {fecha}"
+        )
+        print(aviso)
+        _emit(on_progress, fase="mensaje", mensaje=aviso)
 
     def relay(etapa: str) -> ProgressCallback:
         def cb(ev: dict) -> None:
@@ -272,7 +300,7 @@ def _procesar_experto(
                 continue
             origen = destinos[tienda]
             if sw.formato == "csv":
-                destino = carpeta / f"{tienda}_ready.csv"
+                destino = carpeta / f"{tienda}_ready_{fecha}.csv"
                 _emit(
                     on_progress,
                     fase="mensaje",
@@ -286,7 +314,7 @@ def _procesar_experto(
                     sheet_name=resultado.hoja,
                 )
             else:
-                destino = carpeta / f"{tienda}_ready{ext}"
+                destino = carpeta / f"{tienda}_ready_{fecha}{ext}"
                 shutil.copyfile(origen, destino)
                 filas = resultado.filas_por_tienda[tienda]
             repository.record_generated_file(

@@ -55,3 +55,24 @@ def test_maestro_sin_homologos_o_sin_experto_devuelve_none(tmp_path):
     (tmp_path / "homologos_TINT.xlsx").unlink()
     (tmp_path / "xData_DATACOMPLETA_03_09_2026.xlsx").touch()
     assert find_homologos_master_pair(tmp_path) is None  # falta el homologos
+
+
+def test_fecha_experto_sale_del_nombre(tmp_path):
+    from tint_sis.routing import fecha_experto
+
+    archivo = tmp_path / "Experto_1_24_09_2026.xlsx"
+    archivo.write_bytes(b"x")
+    assert fecha_experto(archivo) == ("24_09_2026", True)
+
+
+def test_fecha_experto_sin_fecha_usa_la_de_modificacion(tmp_path):
+    import datetime
+    import os
+
+    from tint_sis.routing import fecha_experto
+
+    archivo = tmp_path / "Experto_1.xlsx"
+    archivo.write_bytes(b"x")
+    mtime = datetime.datetime(2026, 9, 7, 11, 35).timestamp()
+    os.utime(archivo, (mtime, mtime))
+    assert fecha_experto(archivo) == ("07_09_2026", False)

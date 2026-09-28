@@ -60,21 +60,40 @@ async function renderStrip() {
   }
 }
 
+// Una vista puede devolver de render() una función de limpieza, o
+// {cleanup, puedeSalir}: si puedeSalir() da false (p. ej. cambios sin guardar
+// en Homólogos) se cancela el cambio de vista.
 let activeCleanup = null;
+let activeGuard = null;
+let activeName = null;
+let volviendo = false;
 
 async function route() {
   const name = currentRoute();
+  if (volviendo) {
+    volviendo = false;
+    return;
+  }
+  if (activeGuard && name !== activeName && !activeGuard()) {
+    volviendo = true;
+    location.hash = `#/${activeName}`;
+    return;
+  }
   setActiveNav(name);
   // la barra superior (softwares activos, último ciclo) cambia al guardar la
   // configuración o al terminar un ciclo: se refresca en cada cambio de vista
   renderStrip();
   if (typeof activeCleanup === "function") {
     try { activeCleanup(); } catch (e) {}
-    activeCleanup = null;
   }
+  activeCleanup = null;
+  activeGuard = null;
+  activeName = name;
   clear(viewEl);
   try {
-    activeCleanup = (await ROUTES[name].render(viewEl, { navigate })) || null;
+    const res = await ROUTES[name].render(viewEl, { navigate });
+    activeCleanup = typeof res === "function" ? res : (res && res.cleanup) || null;
+    activeGuard = (res && typeof res === "object" && res.puedeSalir) || null;
   } catch (err) {
     viewEl.append(h("div", { class: "banner banner--error" }, `Error cargando la vista: ${err.message}`));
   }

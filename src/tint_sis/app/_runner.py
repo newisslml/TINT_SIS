@@ -19,6 +19,7 @@ import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from tint_sis.backups import RespaldoError
 from tint_sis.config import AppConfig
 from tint_sis.pipeline import run_pipeline
 
@@ -238,6 +239,14 @@ def _run(config: AppConfig) -> None:
                 "Ciclo cancelado por el usuario. Los softwares de los expertos que ya "
                 "habían terminado quedaron escritos; el resto no se generó."
             )
+        return
+    except RespaldoError as exc:
+        # archivo del ciclo anterior abierto (p. ej. en Excel): mensaje claro, sin traceback
+        with _lock:
+            _state.estado = "error"
+            _state.finished_at = time.time()
+            _state.error = str(exc)
+            _state.log.append("ERROR: no se pudo respaldar el ciclo anterior (ver detalle)")
         return
     except Exception:  # noqa: BLE001 - se muestra el error crudo en la UI
         with _lock:

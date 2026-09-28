@@ -541,6 +541,133 @@ def filtrar_libro(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def iterar_filas(
+    src: Path,
+    *,
+    hoja: str = HOJA_FORMULAS,
+    on_progress: ProgressCallback | None = None,
+    progress_every: int = 5000,
+) -> Iterator[list[str | None]]:
+    """Filas de la hoja de formulas (`hoja`, o la primera), encabezado incluido,
+    como listas de valores por posicion de columna (texto crudo, tambien para
+    los numeros). Lee en streaming con el mismo lector que `filtrar_libro`.
+    `on_progress` recibe {leidas, total} cada `progress_every` filas de datos."""
+    with zipfile.ZipFile(src) as z:
+        libro = _estructura(z)
+        _, _, sheet_part = _elegir_hoja(libro, hoja)
+        sst = _leer_shared_strings(z, libro.shared_strings_part)
+        with z.open(sheet_part) as f:
+            lector = _LectorHoja(f)
+            lector.abrir()
+            dim = _DIM_RE.search(lector.prefijo)
+            total = int(dim.group(2)) - 1 if dim else None
+            for n, fila in enumerate(lector.filas()):
+                valores: dict[int, str | None] = {}
+                for col, attrs, contenido in _celdas(fila):
+                    valores[_col_indice(col)] = _valor(attrs, contenido, sst)
+                ancho = max(valores) + 1 if valores else 0
+                yield [valores.get(i) for i in range(ancho)]
+                if on_progress is not None and n and n % progress_every == 0:
+                    on_progress({"leidas": n, "total": total})
+
+
+def contar_valores(src: Path, headers: Sequence[str], *, hoja: str = HOJA_FORMULAS) -> Counter:
+    """Tupla con los valores crudos (sin recortar espacios) de las columnas
+    `headers` (encabezados normalizados) -> cantidad de filas. Sirve para saber
+    como escribe un experto sus nombres ("Látex " con espacio al final)."""
+    conteo: Counter = Counter()
+    with zipfile.ZipFile(src) as z:
+        libro = _estructura(z)
+        _, sheet_name, sheet_part = _elegir_hoja(libro, hoja)
+        sst = _leer_shared_strings(z, libro.shared_strings_part)
+        with z.open(sheet_part) as f:
+            lector = _LectorHoja(f)
+            lector.abrir()
+            filas_iter = lector.filas()
+            encabezado = next(filas_iter, None)
+            if encabezado is None:
+                raise FormatoExpertoError(f"la hoja '{sheet_name}' de {Path(src).name} no tiene encabezado")
+            columnas = _encabezados(encabezado, sst)
+            faltan = [h for h in headers if h not in columnas]
+            if faltan:
+                raise FormatoExpertoError(
+                    f"{Path(src).name}: la hoja '{sheet_name}' no tiene la(s) columna(s) {', '.join(faltan)}"
+                )
+            cols = {columnas[h]: i for i, h in enumerate(headers)}
+            for fila in filas_iter:
+                conteo[tuple(_valores_clave(fila, cols, sst))] += 1
+    return conteo
+
+
+def quitar_filas_repetidas(
+    src: Path,
+    destino: Path,
+    *,
+    hoja: str = HOJA_FORMULAS,
+    on_progress: ProgressCallback | None = None,
+    progress_every: int = 5000,
+) -> tuple[int, int]:
+    """Copia `src` en `destino` dejando una sola vez cada fila de datos de la
+    hoja de formulas que sea identica (mismos valores en todas las columnas) a
+    una anterior; las filas que quedan se renumeran. Devuelve (leidas, quitadas)."""
+    src, destino = Path(src), Path(destino)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="tint_repetidas_"))
+    try:
+        with zipfile.ZipFile(src) as z:
+            libro = _estructura(z)
+            sheet_idx, sheet_name, sheet_part = _elegir_hoja(libro, hoja)
+            sst = _leer_shared_strings(z, libro.shared_strings_part)
+            filas_tmp = tmp_dir / "filas.rows"
+            leidas = quitadas = 0
+            hubo_formulas = False
+            vistas: set[tuple] = set()
+            with z.open(sheet_part) as f, open(filas_tmp, "wb", buffering=_CHUNK) as out:
+                lector = _LectorHoja(f)
+                lector.abrir()
+                dim = _DIM_RE.search(lector.prefijo)
+                filas_iter = lector.filas()
+                encabezado = next(filas_iter, None)
+                if encabezado is None:
+                    raise FormatoExpertoError(f"la hoja '{sheet_name}' de {src.name} no tiene encabezado")
+                r_enc = _ROW_R_RE.search(encabezado[: encabezado.find(b">") + 1])
+                fila_enc = int(r_enc.group(1)) if r_enc else 1
+                total = int(dim.group(2)) - fila_enc if dim else None
+                siguiente = fila_enc + 1
+                for fila in filas_iter:
+                    leidas += 1
+                    clave = tuple(
+                        (col, _valor(attrs, contenido, sst))
+                        for col, attrs, contenido in _celdas(fila)
+                        if contenido is not None
+                    )
+                    if clave in vistas:
+                        quitadas += 1
+                    else:
+                        vistas.add(clave)
+                        if (b"<f" in fila or b":f" in fila) and _F_RE.search(fila):
+                            fila = _quitar_formulas(fila)
+                            hubo_formulas = True
+                        out.write(_R_NUM_RE.sub(b"\\g<1>" + str(siguiente).encode() + b"\\g<2>", fila))
+                        siguiente += 1
+                    if on_progress is not None and leidas % progress_every == 0:
+                        on_progress({"leidas": leidas, "total": total})
+                prefijo, sufijo = lector.prefijo, lector.sufijo
+
+            if on_progress is not None:
+                on_progress({"guardando": True})
+            ultima = siguiente - 1
+            num = str(ultima).encode()
+            cabeza = _DIM_RE.sub(rb"\g<1>" + num + rb"\g<3>", prefijo, count=1) + encabezado
+            suf = _AUTOFILTER_RE.sub(rb"\g<1>" + num + rb"\g<3>", sufijo, count=1)
+            reemplazos = _sin_calc_chain(z, libro) if hubo_formulas else {}
+            reemplazos[libro.workbook_part] = _ajustar_workbook(z.read(libro.workbook_part), sheet_idx, ultima)
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            _escribir_libro(z, destino, sheet_part, cabeza, filas_tmp, suf, reemplazos)
+        return leidas, quitadas
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def contar_claves(src: Path, key_headers: Sequence[str], *, hoja: str = HOJA_FORMULAS) -> Counter:
     """Clave visible de producto -> cantidad de filas, recorriendo la hoja de
     formulas con el mismo lector que `filtrar_libro` (se usa para armar y
