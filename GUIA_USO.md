@@ -73,8 +73,19 @@ También revisa que se pueda convertir y avisa:
   dividen por 4 (Experto 1 queda tal cual). Un formato que no esté en
   `FORMATOS_GALONES` (`src/tint_sis/maestro.py`) **bloquea** la preparación.
 - **Colorantes ilegibles** (una celda que no sea `CODIGO-CANTIDAD`): bloquean.
-- **Fórmulas repetidas exactas** (todas las columnas iguales): se deja una sola
-  copia en los 3 expertos y se avisa.
+- **Fórmulas duplicadas**: dos filas con la misma **Clasificación, Producto,
+  Cartilla, Color y Base** son la misma fórmula, aunque cambien RGB, notas,
+  formato o colorantes (se comparan sin tildes, mayúsculas ni espacios). Se deja
+  la **primera** que aparece en el maestro en los 3 expertos y se avisa por
+  producto, indicando cuántas traían colorantes distintos. El detalle (fila que
+  queda, fila quitada y si los colorantes eran iguales) está en la hoja
+  **Duplicadas** del resumen de la preparación.
+- **Mismo color en otra cartilla**: en Experto 1 y 2 van todas (llevan la
+  columna Cartilla). **Experto 3 no lleva cartilla**, así que ahí la fórmula se
+  identifica por Clasificación, Producto, Color y Base y va solo la primera que
+  aparece en el maestro; por eso E3 puede traer menos fórmulas que E1/E2. Se
+  avisa por producto y en la hoja Duplicadas figuran con "Se quita de: Experto 3"
+  y la cartilla que quedó.
 
 **Paso 2 — decidir y preparar (≈2 minutos).** Para cada producto nuevo se
 marcan las **tiendas** que lo llevan y se revisa su **nombre en Experto 2 y 3**
@@ -86,7 +97,7 @@ confirmar):
    productos del maestro van a los 3 expertos). Las filas tocadas quedan con la
    nota `Preparación <fecha>` en `Revisar`.
 2. Se generan en `data/input/`, con la fecha del nombre del maestro:
-   - `Experto_1_<fecha>.xlsx`: el maestro (sin las filas repetidas).
+   - `Experto_1_<fecha>.xlsx`: el maestro (sin las fórmulas duplicadas).
    - `Experto_3_<fecha>.xlsx` (Santint/Corob): `group_code`/`product_code` de la
      tabla, `color_key1` = Color, `comment` = Tolerancia luz, `base_code` con la
      grafía que ya usa Corob (`BASE N` → `Base N`), `can_code` `Galon`,

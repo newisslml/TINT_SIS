@@ -183,7 +183,7 @@ export function crearPreparacion({ alCambiarEstado } = {}) {
       h(
         "div",
         { class: "row" },
-        numcard(miles(a.filas_unicas), a.repetidas ? `fórmulas (de ${miles(a.filas)} filas; ${miles(a.repetidas)} repetidas)` : "fórmulas en el maestro"),
+        numcard(miles(a.filas_unicas), a.repetidas ? `fórmulas (de ${miles(a.filas)} filas; ${miles(a.repetidas)} duplicadas)` : "fórmulas en el maestro"),
         numcard(miles(a.productos), "productos"),
         numcard(miles(a.nuevos.length), "productos nuevos"),
         ...(a.anterior
@@ -284,7 +284,7 @@ export function crearPreparacion({ alCambiarEstado } = {}) {
       "div",
       { class: "muted", style: "font-size:12px" },
       `${n.clasificacion} · ${topConteos(n.formatos, 2)}`,
-      n.repetidas ? ` · ${miles(n.repetidas)} repetidas quitadas` : "",
+      n.repetidas ? ` · ${miles(n.repetidas)} duplicadas quitadas` : "",
       h("br"),
       `Cartillas: ${topConteos(n.cartillas)}`
     );

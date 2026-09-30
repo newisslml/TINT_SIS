@@ -62,7 +62,8 @@ def test_analisis_compara_con_el_ciclo_anterior_y_la_tabla(entorno):
 
     assert (a.fecha, a.fecha_del_nombre) == ("28_09_2026", True)
     assert a.anterior == "Experto_1_24_09_2026.xlsx"
-    assert (a.filas, a.filas_unicas, a.repetidas, a.productos) == (7, 6, 1, 4)
+    assert (a.filas, a.filas_unicas, a.repetidas, a.productos) == (9, 7, 2, 4)
+    assert a.repetidas_e3 == 1  # "amarillo" de Habitacional en otra cartilla
     assert a.puede_preparar and not a.bloqueantes
 
     [nuevo] = a.nuevos
@@ -73,11 +74,33 @@ def test_analisis_compara_con_el_ciclo_anterior_y_la_tabla(entorno):
     assert nuevo.nuevo_en_maestro is True
 
     cambios = {c.producto: (c.antes, c.ahora, c.agregadas, c.quitadas) for c in a.cambios}
-    assert cambios == {"Ltx. CP-70 Soquina construccion": (1, 2, 1, 0), "Oleo Opaco Ceresita": (2, 1, 0, 1)}
-    assert a.sin_cambios == 1
-    # CP-70 +1; Texturex +2 (su fila repetida no cuenta porque no se entrega)
-    assert (a.filas_agregadas, a.filas_quitadas) == (3, 1)
+    assert cambios == {
+        "Ltx. Habitacional Ceresita": (1, 2, 1, 0),
+        "Ltx. CP-70 Soquina construccion": (1, 2, 1, 0),
+        "Oleo Opaco Ceresita": (2, 1, 0, 1),
+    }
+    assert a.sin_cambios == 0
+    # Habitacional +1; CP-70 +1; Texturex +2 (las duplicadas no cuentan porque no se entregan)
+    assert (a.filas_agregadas, a.filas_quitadas) == (4, 1)
     assert a.quitados == []
+
+    # duplicadas: misma Clasificacion, Producto, Cartilla, Color y Base (de los 3
+    # expertos) o mismo color en otra cartilla (solo de Experto 3)
+    assert [
+        (d.producto, d.color, d.fila_conservada, d.fila_quitada, d.misma_formula, d.solo_e3, d.cartilla_conservada)
+        for d in a._duplicados
+    ] == [
+        ("Texturex y Homologos", "Alamo", 6, 8, True, False, "Muestrario Texturex"),
+        ("Ltx. CP-70 Soquina construccion", "Blanco", 3, 9, False, False, "Millennium"),
+        ("Ltx. Habitacional Ceresita", "amarillo", 2, 10, False, True, "Millennium"),
+    ]
+    assert any(
+        "Ltx. CP-70 Soquina construccion: 1 formulas duplicadas" in w and "1 con colorantes distintos" in w
+        for w in a.advertencias
+    )
+    assert any(
+        "Ltx. Habitacional Ceresita: 1 formulas repiten Color y Base en otra cartilla" in w for w in a.advertencias
+    )
 
     planes = {p.label: p for p in a.expertos}
     assert planes["Experto 1"].archivo == "Experto_1_28_09_2026.xlsx"
@@ -87,7 +110,7 @@ def test_analisis_compara_con_el_ciclo_anterior_y_la_tabla(entorno):
     assert planes["Experto 3"].entran == ["Ltx. CP-70 Soquina construccion", "Texturex y Homologos"]
     assert planes["Experto 3"].salen == ["Esm. al agua / Otro"]
     assert any("se dividen por 4" in w for w in a.advertencias)
-    assert any("1 formulas repetidas" in w for w in a.advertencias)
+    assert any("Texturex y Homologos: 1 formulas duplicadas" in w and "mismos colorantes" in w for w in a.advertencias)
     # la tabla no tiene nombre de Experto 2 para CP-70: se completa al preparar
     assert a._completar == {3: {"Experto 2": "Ltx. CP-70 Soquina construccion"}}
     json.dumps(a.to_dict())  # lo que va a la UI es serializable
@@ -112,12 +135,15 @@ def test_preparar_genera_los_tres_expertos_y_actualiza_la_tabla(entorno):
     assert sorted(p.name for p in backup.iterdir()) == [
         "Experto_1_24_09_2026.xlsx", "Experto_2_24_09_2026.xlsm", "Experto_3_24_09_2026.xlsx", "productos_TINT.xlsx",
     ]
-    assert [(x.label, x.filas) for x in r.archivos] == [("Experto 1", 6), ("Experto 2", 6), ("Experto 3", 6)]
+    # Experto 3 sin el "amarillo" de la otra cartilla
+    assert [(x.label, x.filas) for x in r.archivos] == [("Experto 1", 7), ("Experto 2", 7), ("Experto 3", 6)]
+    assert [p.filas for p in a.expertos] == [7, 7, 6]
 
-    # Experto 1: el maestro sin la fila repetida
+    # Experto 1: el maestro sin las duplicadas (la segunda CP-70 "blanco" tampoco)
     e1 = _filas(inp / "Experto_1_28_09_2026.xlsx")
-    assert len(e1) == 7 and e1[0][1] == "Producto "
-    assert [f[6] for f in e1[1:]] == ["amarillo", "blanco", "gris", "rojo", "Alamo ", "Arcilla"]
+    assert len(e1) == 8 and e1[0][1] == "Producto "
+    assert [f[6] for f in e1[1:]] == ["amarillo", "blanco", "gris", "rojo", "Alamo ", "Arcilla", "amarillo"]
+    assert e1[7][2] == "Texturex"
 
     # Experto 3: grafia de la plantilla, todo en galon (Texturex / 4)
     e3 = _filas(inp / "Experto_3_28_09_2026.xlsx", "Formulas")
@@ -130,6 +156,7 @@ def test_preparar_genera_los_tres_expertos_y_actualiza_la_tabla(entorno):
     assert e3[5][:8] == ["Texturas", "Texturex", "Alamo ", None, None, "Batir Tineta 5' antes de tintear",
                          "según producto", "Galon"]
     assert e3[5][15:19] == ["OC", 15.7, "VE", 11.1]
+    assert len(e3) == 7 and [f[2] for f in e3[1:]].count("amarillo") == 1
     assert _filas(inp / "Experto_3_28_09_2026.xlsx", "IntegrityData") == [["doc_version"], [2]]
 
     # Experto 2: cm3, " AO", Base_Qty 3785, Note2 = Primer, clasificacion con la grafia de la plantilla
@@ -140,6 +167,7 @@ def test_preparar_genera_los_tres_expertos_y_actualiza_la_tabla(entorno):
     assert e2[3][17] == "*USAR PRIMER GRIS"
     assert e2[5][1] == "Texturex y Homologos"
     assert e2[5][8:12] == [" OC", pytest.approx(15.7 * 29.574 / 48), " VE", pytest.approx(11.1 * 29.574 / 48)]
+    assert len(e2) == 8 and e2[7][1:4] == ["Ltx.Habitacional Ceresita", "Texturex", "amarillo"]
 
     # tabla: producto nuevo al final y nombre de Experto 2 completado
     tabla = _filas(inp / "productos_TINT.xlsx")
@@ -164,12 +192,13 @@ def test_el_ciclo_usa_lo_preparado_sin_advertencias(entorno, tmp_path):
 
     assert summary.ingestion_warnings == []
     filas = {(g.software, g.grupo): g.filas for g in summary.archivos}
-    # Tiendas 14: Habitacional + Texturex (2); MP14: ademas CP-70 (2) y Opaco (1)
+    # Tiendas 14: Habitacional (2 cartillas en E1/E2, 1 en E3) + Texturex (2);
+    # MP14: ademas CP-70 (2) y Opaco (1)
     assert filas[("Santint", "Tiendas 14")] == 3
-    assert filas[("Tinwise_Lab", "Tiendas 14")] == 3
-    assert filas[("Color_Pro4.8", "Tiendas 14")] == 3
+    assert filas[("Tinwise_Lab", "Tiendas 14")] == 4
+    assert filas[("Color_Pro4.8", "Tiendas 14")] == 4
     assert filas[("Corob_Tint", "MP14")] == 6
-    assert filas[("Color_Pro3.1.1", "MP14")] == 6
+    assert filas[("Color_Pro3.1.1", "MP14")] == 7
 
 
 def test_tabla_abierta_no_cambia_nada(entorno, monkeypatch):

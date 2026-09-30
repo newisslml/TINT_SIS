@@ -4,10 +4,14 @@ del que salen los 3 archivos expertos de un ciclo.
 Tiene el formato de Experto 1 (Color Pro): una hoja con Clasificacion, Producto,
 Cartilla, Formato, Tolerancia luz, Primer, Color, R, G, B, Base, Oz base y
 Col.N-1/48 onzas = "AO-26.5" (codigo y cantidad juntos, en 1/48 oz por envase del
-Formato). Reglas verificadas fila a fila contra los expertos del 24/09/2026
-(174.127 formulas iguales en los 3):
+Formato). Una formula se identifica por CLAVE_FORMULA (Clasificacion, Producto,
+Cartilla, Color y Base); las filas con una clave ya vista son duplicadas y no
+pasan a ningun experto. Experto 3 no lleva cartilla, asi que ahi la clave es
+CLAVE_FORMULA_E3 (sin Cartilla): de un mismo color en varias cartillas queda la
+primera fila. Reglas verificadas fila a fila contra los expertos del
+24/09/2026 (174.127 formulas iguales en los 3):
 
-  Experto 1  el maestro tal cual (copia del archivo).
+  Experto 1  el maestro tal cual (copia del archivo, sin las duplicadas).
   Experto 3  Santint/Corob: group_code / product_code de la tabla de productos,
              color_key1 = Color, comment = Tolerancia luz, base_code = Base con la
              grafia de las bases que ya conoce ("BASE N" -> "Base N", "fuerte" ->
@@ -65,7 +69,12 @@ COLUMNAS = {
     "b": "b",
     "base": "base",
 }
-OBLIGATORIAS = ("clasificacion", "producto", "formato", "color", "base")
+# una formula = un color de un producto: dos filas con la misma clave son la misma
+# formula aunque cambien RGB, notas, formato o colorantes (se deja la primera)
+CLAVE_FORMULA = ("clasificacion", "producto", "cartilla", "color", "base")
+# Experto 3 no lleva cartilla: el mismo color en dos cartillas es la misma formula
+CLAVE_FORMULA_E3 = ("clasificacion", "producto", "color", "base")
+OBLIGATORIAS = ("clasificacion", "producto", "cartilla", "formato", "color", "base")
 _COLORANTE_ENC_RE = re.compile(r"^col\.?(\d+)-1/48onzas$")
 _COLORANTE_RE = re.compile(r"^([A-Za-z]{1,4})\s*-\s*(\d+(?:[.,]\d+)?)$")
 # celdas de colorante vacias: "", "-", "-0", "0"
@@ -127,6 +136,12 @@ class Columnas:
 
     def celdas_colorante(self, fila: list) -> list[object]:
         return [fila[i] if i < len(fila) else None for i in self.colorantes]
+
+    def clave_formula(self, fila: list, campos: tuple[str, ...] = CLAVE_FORMULA) -> tuple[str, ...]:
+        """Clasificacion, Producto, Cartilla, Color y Base (o `campos`) sin
+        acentos, mayusculas ni espacios: dos filas con la misma clave son la
+        misma formula."""
+        return tuple(normalizar(self.valor(fila, c)) for c in campos)
 
 
 def leer(

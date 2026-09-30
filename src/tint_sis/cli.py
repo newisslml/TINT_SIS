@@ -93,14 +93,17 @@ def _cmd_preparar(args, cfg) -> None:
     miles = lambda n: f"{n:,}".replace(",", ".")  # noqa: E731
     print(f"\nMaestro: {analisis.maestro}  (ciclo {analisis.fecha.replace('_', '/')})")
     print(f"  formulas: {miles(analisis.filas)}  distintas: {miles(analisis.filas_unicas)}  "
-          f"repetidas: {miles(analisis.repetidas)}  productos: {analisis.productos}")
+          f"duplicadas: {miles(analisis.repetidas)}  productos: {analisis.productos}")
+    if analisis.repetidas_e3:
+        print(f"  Experto 3 (sin cartilla): {miles(analisis.filas_unicas - analisis.repetidas_e3)} formulas "
+              f"({miles(analisis.repetidas_e3)} con el mismo color en otra cartilla quedan fuera)")
     print(f"Comparado con: {analisis.anterior or '(no hay Experto 1 anterior)'}")
     print(f"  formulas agregadas: {miles(analisis.filas_agregadas)}  quitadas: {miles(analisis.filas_quitadas)}  "
           f"productos sin cambios: {analisis.sin_cambios}")
     print(f"\nProductos nuevos: {len(analisis.nuevos)}")
     for n in analisis.nuevos:
         print(f"  - {n.linea} / {n.producto}: {miles(n.filas)} formulas"
-              + (f" ({miles(n.repetidas)} repetidas quitadas)" if n.repetidas else ""))
+              + (f" ({miles(n.repetidas)} duplicadas quitadas)" if n.repetidas else ""))
     for c in analisis.cambios:
         print(f"  cambia {c.producto}: {miles(c.antes)} -> {miles(c.ahora)} (+{c.agregadas} / -{c.quitadas})")
     for q in analisis.quitados:

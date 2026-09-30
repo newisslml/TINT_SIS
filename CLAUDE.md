@@ -121,9 +121,22 @@ corrigió a Tiendas 14.
     Ojo: un archivo `Experto_28_09_2026.xlsx` en la entrada calza con el glob
     `Experto_2*` y se toma como Experto 2 (bloquea la preparación por plantilla sin
     columnas): los maestros van en `data/maestros/`, nunca con nombre `Experto_*`.
-  - **Filas repetidas exactas se dejan una vez** (decisión del usuario): Texturex
-    llegó como 6 bloques idénticos de 4.775 fórmulas. E1 deja de ser copia exacta
-    del maestro solo en ese caso (`sheet_filter.quitar_filas_repetidas`).
+  - **Fórmulas duplicadas se dejan una vez** (decisión del usuario, 2026-09-30):
+    la clave es **Clasificación + Producto + Cartilla + Color + Base**
+    (`maestro.CLAVE_FORMULA`, con `normalizar`; RGB, notas, formato y colorantes
+    no cuentan). Se deja la primera fila del maestro en E1/E2/E3
+    (`sheet_filter.quitar_filas_repetidas(clave=...)`), aviso por producto con
+    cuántas traían colorantes distintos y hoja "Duplicadas" en el resumen. Antes
+    (hasta el 30/09) solo se quitaban filas idénticas en todas las columnas.
+    Maestro `data/maestros/Experto2_.xlsx` (30/09): 4.496 duplicadas (Construcolor
+    4.064, 3 con colorantes distintos; 72 en cada una de las 6 texturas).
+  - **E3 sin cartilla** (decisión del usuario, 2026-09-30): E3 no tiene columna
+    Cartilla, así que su clave es `maestro.CLAVE_FORMULA_E3` (Clasificación +
+    Producto + Color + Base) y del mismo color en varias cartillas va solo la
+    primera. E1/E2 siguen con Cartilla. Con `Experto2_.xlsx`: E1/E2 = 228.179,
+    E3 = 227.038 (1.141 fuera, 405 de ellas con colorantes distintos, p. ej.
+    Acrilina GF 1088 Muestrario vs Sipamundo). El E3 original de tintometría
+    (24/09) ya traía estos pares indistinguibles (color_key2/3 vacíos).
   - Producto del maestro que no está en la tabla = **producto nuevo**: el
     usuario elige tiendas (default: todas) y nombres E2/E3 en la app; se agrega
     a la tabla con nota `Preparación <fecha>` en `Revisar`.
@@ -203,6 +216,10 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # .exe + instalador
   de Playwright instalado no coincide con la versión). Para no tocar la config
   real, levantar otra instancia con `LOCALAPPDATA` apuntando a una carpeta temporal
   (config.json propio) en otro puerto.
+- **Ojo con el config.json aislado**: escribirlo sin BOM (desde Python con
+  `json.dump`, no con `Out-File -Encoding utf8` de PowerShell 5.1). Si no se puede
+  leer, `load_config` vuelve en silencio a los defaults = `data/` real del repo
+  (el 30/09 una prueba "aislada" de `cli preparar` pisó `data/input` por esto).
 - Estilo: strings de Python sin tildes (convención existente del código); textos
   de la UI en JS con tildes. Tests con libros sintéticos en `tests/libros_prueba.py`.
 
@@ -240,6 +257,12 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # .exe + instalador
   desde 0.2.x / PC nuevo) + `TINT_SIS\input` con la tabla y los E1/E2/E3 del 28/09.
   Exe probado aislado (LOCALAPPDATA temporal): ventana "TINT_SIS 0.3.0", rutas
   /api/preparar/* y /api/productos OK. Todo sin commitear.
+- **Versión 0.3.1** (30/09/2026): duplicadas por Clasificación+Producto+Cartilla+
+  Color+Base y sin el aviso de "carpeta de entrega" en Inicio.
+  `dist/installer/TINT_SIS_Setup_0.3.1.exe` y `dist/TINT_SIS_0.3.1_instalacion(.zip)`
+  = instalador + LEEME + `TINT_SIS\input\productos_TINT.xlsx` (sin expertos, a
+  pedido del usuario). Exe sin probar abierto. Sin commitear. **Ojo:** ese
+  instalador es anterior a la regla "E3 sin cartilla"; hay que regenerarlo.
 - **En curso:** el usuario prueba las importaciones de cada archivo filtrado en su
   software; los ajustes que salgan se corrigen sobre la marcha.
 - Revisar `productos_TINT.xlsx`: ~20 filas con nota en `Revisar` (nombres

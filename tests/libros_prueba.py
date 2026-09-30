@@ -30,10 +30,12 @@ HEADER_E3_PLANTILLA = [
 def carpeta_preparacion(base: Path) -> tuple[Path, Path]:
     """(carpeta de entrada del ciclo anterior, archivo maestro nuevo) para probar
     la preparacion del experto:
-      - Habitacional: igual en el maestro y en el ciclo anterior
+      - Habitacional: igual en el maestro y en el ciclo anterior, mas su color
+        "amarillo" en otra cartilla (va a E1/E2, no a E3)
       - CP-70: en la tabla sin nombre de Experto 2 (se completa); el maestro le
         agrega una formula; viene en "Galon (3.785 Lts.)" con base "BASE N"
       - Opaco: el maestro le quita una formula ("viejo")
+      - CP-70 trae ademas una duplicada del mismo color con otro colorante
       - Texturex: producto nuevo en "Tineta 4 gl", con una formula repetida
       - E3 anterior tiene "Esm. al agua / Otro", que el maestro ya no trae"""
     inp = base / "input"
@@ -101,6 +103,13 @@ def carpeta_preparacion(base: Path) -> tuple[Path, Path]:
             ["Texturas", "Texturex y Homologos ", "SW", "Tineta 4 gl", "Batir Tineta 5' antes de tintear", None,
              "Arcilla", None, None, None, "según producto", 274.5, "NE-32", None],
             list(texturex),  # repetida exacta
+            # misma Clasificacion/Producto/Cartilla/Color/Base que cp70 (con otra
+            # grafia), otro formato, RGB y colorante: duplicada, se deja cp70
+            ["Latex", "Ltx. CP-70 Soquina construccion", "Millennium", "Galon", None, None, " Blanco",
+             1, 2, 3, "Base N", 128, "NE-4", None],
+            # el color de habitacional en otra cartilla: va a E1/E2, no a E3 (sin cartilla)
+            ["Latex ", "Ltx. Habitacional Ceresita", "Texturex", "Galon", None, None, "amarillo",
+             None, None, None, "Fuerte", 116, "NE-15", None],
         ],
         hoja="Hoja1",
         extra=False,

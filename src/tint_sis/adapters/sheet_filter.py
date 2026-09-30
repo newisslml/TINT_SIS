@@ -604,12 +604,16 @@ def quitar_filas_repetidas(
     destino: Path,
     *,
     hoja: str = HOJA_FORMULAS,
+    clave: Sequence[str] | None = None,
     on_progress: ProgressCallback | None = None,
     progress_every: int = 5000,
 ) -> tuple[int, int]:
-    """Copia `src` en `destino` dejando una sola vez cada fila de datos de la
-    hoja de formulas que sea identica (mismos valores en todas las columnas) a
-    una anterior; las filas que quedan se renumeran. Devuelve (leidas, quitadas)."""
+    """Copia `src` en `destino` dejando solo la primera de las filas de datos de
+    la hoja de formulas que se repiten; las que quedan se renumeran. Sin `clave`
+    se repite la fila identica en todas las columnas; con `clave` (encabezados)
+    la que tiene los mismos valores en esas columnas, comparados con
+    `normalizar` (una fila con esas columnas vacias se deja siempre). Devuelve
+    (leidas, quitadas)."""
     src, destino = Path(src), Path(destino)
     tmp_dir = Path(tempfile.mkdtemp(prefix="tint_repetidas_"))
     try:
@@ -632,18 +636,33 @@ def quitar_filas_repetidas(
                 r_enc = _ROW_R_RE.search(encabezado[: encabezado.find(b">") + 1])
                 fila_enc = int(r_enc.group(1)) if r_enc else 1
                 total = int(dim.group(2)) - fila_enc if dim else None
+                cols_clave: dict[bytes, int] | None = None
+                if clave is not None:
+                    headers = _encabezados(encabezado, sst)
+                    faltan = [h for h in clave if normalizar(h) not in headers]
+                    if faltan:
+                        raise FormatoExpertoError(
+                            f"la hoja '{sheet_name}' de {src.name} no tiene las columnas {', '.join(faltan)}"
+                        )
+                    cols_clave = {headers[normalizar(h)]: i for i, h in enumerate(clave)}
                 siguiente = fila_enc + 1
                 for fila in filas_iter:
                     leidas += 1
-                    clave = tuple(
-                        (col, _valor(attrs, contenido, sst))
-                        for col, attrs, contenido in _celdas(fila)
-                        if contenido is not None
-                    )
-                    if clave in vistas:
+                    if cols_clave is None:
+                        huella: tuple | None = tuple(
+                            (col, _valor(attrs, contenido, sst))
+                            for col, attrs, contenido in _celdas(fila)
+                            if contenido is not None
+                        )
+                    else:
+                        huella = tuple(normalizar(v) for v in _valores_clave(fila, cols_clave, sst))
+                        if not any(huella):
+                            huella = None
+                    if huella is not None and huella in vistas:
                         quitadas += 1
                     else:
-                        vistas.add(clave)
+                        if huella is not None:
+                            vistas.add(huella)
                         if (b"<f" in fila or b":f" in fila) and _F_RE.search(fila):
                             fila = _quitar_formulas(fila)
                             hubo_formulas = True

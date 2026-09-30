@@ -146,17 +146,10 @@ def get_inicio() -> dict:
     last = _last_batch_files(cfg)
     prev = preview_batch(cfg)
 
-    alertas = []
-    for b in prev.bloqueantes + prev.advertencias:
-        alertas.append({"nivel": "advertencia", "texto": b})
-    if not cfg.delivery_paths:
-        alertas.append(
-            {
-                "nivel": "info",
-                "texto": "No hay carpeta de entrega configurada. Se puede generar igual; "
-                "habra que copiar la GData a los tecnicos a mano.",
-            }
-        )
+    alertas = [
+        {"nivel": "advertencia", "texto": b}
+        for b in prev.bloqueantes + prev.advertencias
+    ]
 
     mem = _runner.last_summary()
     advertencias = (

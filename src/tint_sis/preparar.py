@@ -8,14 +8,18 @@ que envia tintometria (vista "Preparar experto" y `cli preparar`).
      - la tabla de productos: productos que no estan (se agregan al preparar);
      - los Experto 2/3 anteriores (plantillas): que productos entran y salen.
    Tambien valida que se pueda convertir (formatos con equivalencia a galon,
-   colorantes legibles) y cuenta las filas repetidas exactas, que se dejan una
-   sola vez (Texturex llego con sus 4.775 formulas copiadas 6 veces).
+   colorantes legibles) y cuenta las formulas duplicadas: filas con la misma
+   Clasificacion, Producto, Cartilla, Color y Base (maestro.CLAVE_FORMULA) que
+   una anterior, aunque cambien RGB, notas, formato o colorantes. Se deja la
+   primera (Texturex llego con sus 4.775 formulas copiadas 6 veces; Construcolor
+   con 4.064 colores dos veces). Experto 3 no lleva cartilla: ahi ademas se deja
+   una sola vez el mismo color en distintas cartillas (maestro.CLAVE_FORMULA_E3).
 2. `preparar_expertos`, con lo que decide el usuario para cada producto nuevo
    (tiendas y nombres):
      - agrega esos productos a productos_TINT.xlsx y completa los nombres de
        Experto 2/3 que falten (todos los productos del maestro van a los 3);
      - genera Experto_1/2/3_<DD_MM_YYYY> en la carpeta de entrada: E1 es el
-       maestro (sin filas repetidas); E2 y E3 salen de las reglas de maestro.py
+       maestro (sin las duplicadas); E2 y E3 salen de las reglas de maestro.py
        sobre el libro del ciclo anterior como plantilla (macros, hojas
        auxiliares e IntegrityData se conservan);
      - mueve los expertos y la tabla anteriores a <data>/backups/expertos/<fecha>/;
@@ -101,7 +105,8 @@ def _canon(conteo: Mapping[object, int]) -> dict[str, str]:
 
 
 def _crudo(fila: list) -> tuple:
-    """Contenido de una fila para detectar repetidas (sin celdas vacias al final)."""
+    """Contenido de una fila para comparar con el experto anterior (sin celdas
+    vacias al final)."""
     crudo = tuple(fila)
     while crudo and crudo[-1] in (None, ""):
         crudo = crudo[:-1]
@@ -131,7 +136,11 @@ class ProductoMaestro:
     producto: str  # nombre visible (sin espacios de los bordes)
     clasificacion: str = ""
     filas: int = 0
-    repetidas: int = 0
+    repetidas: int = 0  # formulas duplicadas (misma maestro.CLAVE_FORMULA que una anterior)
+    distintas: int = 0  # de esas, con colorantes distintos a los de la primera
+    # ademas, solo en Experto 3: mismo color y base que una anterior en otra cartilla
+    repetidas_e3: int = 0
+    distintas_e3: int = 0
     formatos: Counter = field(default_factory=Counter)
     cartillas: Counter = field(default_factory=Counter)
     clasificaciones: Counter = field(default_factory=Counter)
@@ -206,6 +215,7 @@ class Analisis:
     advertencias: list[str]
     bloqueantes: list[str]
     puede_preparar: bool = False
+    repetidas_e3: int = 0  # ademas de `repetidas`, las que no van a Experto 3 (sin cartilla)
     # lo que necesita preparar_expertos (no va a la UI)
     _nombres: dict = field(default_factory=dict, repr=False)  # clave -> maestro.NombresProducto
     _completar: dict = field(default_factory=dict, repr=False)  # fila de la tabla -> experto -> nombre
@@ -216,19 +226,50 @@ class Analisis:
     _clasif_e2: dict = field(default_factory=dict, repr=False)
     _productos_e2: dict = field(default_factory=dict, repr=False)
     _grupo_de: dict = field(default_factory=dict, repr=False)  # clasificacion normalizada -> grupo E3
+    _duplicados: list = field(default_factory=list, repr=False)  # Duplicada de cada fila que se quita
 
     def to_dict(self) -> dict:
         return {k: v for k, v in asdict(self).items() if not k.startswith("_")}
 
 
 @dataclass
+class Duplicada:
+    """Fila del maestro que se quita por repetir la formula de una anterior."""
+
+    producto: str
+    clasificacion: str
+    cartilla: str
+    color: str
+    base: str
+    fila_conservada: int  # fila de Excel del maestro
+    fila_quitada: int
+    misma_formula: bool  # mismos colorantes (por galon) que la conservada
+    solo_e3: bool = False  # otra cartilla: se quita solo de Experto 3
+    cartilla_conservada: str = ""
+
+
+@dataclass
 class _Lectura:
     productos: dict[str, ProductoMaestro]
-    contenido: dict[str, Counter]  # clave -> contenido de cada fila -> veces
+    contenido: dict[str, Counter]  # clave -> contenido de cada fila (sin duplicadas) -> veces
     formatos: dict[str, dict]
     ilegibles: int
     ejemplos_ilegibles: list[str]
     max_colorantes: int
+    duplicados: list[Duplicada] = field(default_factory=list)
+
+
+def _colorantes(cols: maestro.Columnas, fila: list) -> tuple:
+    """Colorantes de la fila por galon, para ver si dos duplicadas traen la misma
+    formula (texto crudo si alguno no se puede leer o el formato no se conoce)."""
+    celdas = cols.celdas_colorante(fila)
+    galones = maestro.galones(cols.valor(fila, "formato"))
+    if galones is not None:
+        try:
+            return tuple(sorted(maestro.colorantes_por_galon(celdas, galones)))
+        except maestro.ColoranteError:
+            pass
+    return tuple(normalizar(c) for c in celdas)
 
 
 # --------------------------------------------------------------------------- #
@@ -236,7 +277,8 @@ class _Lectura:
 # --------------------------------------------------------------------------- #
 def _leer(path: Path, on_progress: ProgressCallback | None, etapa: str, pct: tuple[int, int]) -> _Lectura:
     """Recorre un maestro / Experto 1: productos, contenido de las filas por
-    producto (para comparar), formatos, colorantes ilegibles y repetidas."""
+    producto (para comparar), formatos, colorantes ilegibles y formulas
+    duplicadas (misma maestro.CLAVE_FORMULA que una fila anterior)."""
     lo, hi = pct
 
     def progreso(ev: dict) -> None:
@@ -247,7 +289,10 @@ def _leer(path: Path, on_progress: ProgressCallback | None, etapa: str, pct: tup
 
     cols, filas = maestro.leer(path, on_progress=progreso if on_progress else None)
     lectura = _Lectura({}, {}, {}, 0, [], 0)
-    vistas: set[tuple] = set()
+    # clave de formula -> (fila, colorantes) de la primera; la de Experto 3 sin
+    # cartilla, con la cartilla de la primera
+    vistas: dict[tuple, tuple[int, tuple]] = {}
+    vistas_e3: dict[tuple, tuple[int, tuple, str]] = {}
     for n, fila in enumerate(filas, start=2):
         nombre = cols.valor(fila, "producto")
         if nombre is None or not str(nombre).strip():
@@ -262,12 +307,43 @@ def _leer(path: Path, on_progress: ProgressCallback | None, etapa: str, pct: tup
         formato = str(cols.valor(fila, "formato") or "").strip()
         p.formatos[formato] += 1
         p.cartillas[str(cols.valor(fila, "cartilla") or "").strip()] += 1
-        crudo = _crudo(fila)
-        if crudo in vistas:
-            p.repetidas += 1
-        else:
-            vistas.add(crudo)
-        lectura.contenido[clave][crudo] += 1
+        cartilla = str(cols.valor(fila, "cartilla") or "").strip()
+        colorantes = _colorantes(cols, fila)
+        formula = cols.clave_formula(fila)
+        formula_e3 = cols.clave_formula(fila, maestro.CLAVE_FORMULA_E3)
+        primera = vistas.get(formula)
+        primera_e3 = vistas_e3.get(formula_e3)
+        solo_e3 = False
+        if primera is None:
+            vistas[formula] = (n, colorantes)
+            lectura.contenido[clave][_crudo(fila)] += 1  # solo lo que se entrega
+            if primera_e3 is None:
+                vistas_e3[formula_e3] = (n, colorantes, cartilla)
+            else:  # el mismo color en otra cartilla: no va a Experto 3
+                solo_e3 = True
+                primera = primera_e3[:2]
+        if primera is not None:
+            misma = primera[1] == colorantes
+            if solo_e3:
+                p.repetidas_e3 += 1
+                p.distintas_e3 += not misma
+            else:
+                p.repetidas += 1
+                p.distintas += not misma
+            lectura.duplicados.append(
+                Duplicada(
+                    producto=p.producto,
+                    clasificacion=str(cols.valor(fila, "clasificacion") or "").strip(),
+                    cartilla=cartilla,
+                    color=str(cols.valor(fila, "color") or "").strip(),
+                    base=str(cols.valor(fila, "base") or "").strip(),
+                    fila_conservada=primera[0],
+                    fila_quitada=n,
+                    misma_formula=misma,
+                    solo_e3=solo_e3,
+                    cartilla_conservada=primera_e3[2] if solo_e3 else cartilla,
+                )
+            )
         f = lectura.formatos.setdefault(formato, {"filas": 0, "galones": maestro.galones(formato)})
         f["filas"] += 1
         usados = 0
@@ -313,6 +389,7 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
     filas = sum(p.filas for p in productos.values())
     repetidas = sum(p.repetidas for p in productos.values())
     unicas = filas - repetidas
+    repetidas_e3 = sum(p.repetidas_e3 for p in productos.values())
 
     sin_equivalencia = [f"'{f}' ({_miles(d['filas'])} formulas)" for f, d in lec.formatos.items() if d["galones"] is None]
     if sin_equivalencia:
@@ -333,9 +410,25 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
             )
     for p in productos.values():
         if p.repetidas:
+            distintas = (
+                f"; {_miles(p.distintas)} con colorantes distintos a la primera" if p.distintas
+                else ", todas con los mismos colorantes"
+            )
             advertencias.append(
-                f"{p.producto}: {_miles(p.repetidas)} formulas repetidas exactas en el maestro "
-                f"({_miles(p.filas)} filas, {_miles(p.unicas)} distintas). Se deja una sola copia."
+                f"{p.producto}: {_miles(p.repetidas)} formulas duplicadas en el maestro (misma Clasificacion, "
+                f"Producto, Cartilla, Color y Base{distintas}). Se deja la primera que aparece: "
+                f"{_miles(p.unicas)} de {_miles(p.filas)} filas. Detalle en el resumen, hoja Duplicadas."
+            )
+        if p.repetidas_e3:
+            distintas = (
+                f"; {_miles(p.distintas_e3)} con colorantes distintos a la primera" if p.distintas_e3
+                else ", todas con los mismos colorantes"
+            )
+            advertencias.append(
+                f"{p.producto}: {_miles(p.repetidas_e3)} formulas repiten Color y Base en otra cartilla"
+                f"{distintas}. Experto 3 no lleva cartilla: ahi se deja la primera que aparece "
+                f"({_miles(p.unicas - p.repetidas_e3)} formulas; en Experto 1 y 2 van todas). "
+                "Detalle en el resumen, hoja Duplicadas."
             )
 
     # --- Experto 1 del ciclo anterior ---
@@ -365,13 +458,13 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
         agregadas = sum((ahora - antes).values())
         quitadas = sum((antes - ahora).values())
         if agregadas or quitadas:
-            cambios.append(Cambio(p.producto, ant_productos[clave].filas, p.filas, agregadas, quitadas))
+            cambios.append(Cambio(p.producto, ant_productos[clave].unicas, p.unicas, agregadas, quitadas))
             agregadas_tot += agregadas
             quitadas_tot += quitadas
         else:
             sin_cambios += 1
     quitados = [
-        {"producto": p.producto, "clasificacion": p.clasificacion, "filas": p.filas}
+        {"producto": p.producto, "clasificacion": p.clasificacion, "filas": p.unicas}
         for clave, p in ant_productos.items()
         if clave not in productos
     ]
@@ -526,7 +619,7 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
                 archivo=nombre_experto(glob, fecha, plantilla.suffix.lower()),
                 plantilla=plantilla.name,
                 productos=len(productos),
-                filas=unicas,
+                filas=unicas - repetidas_e3 if label == E3 else unicas,
                 entran=sorted(productos[c].producto for c, n in generados.items() if n not in anteriores),
                 salen=sorted(anteriores[k] for k in set(anteriores) - set(generados.values())),
                 estado="ok",
@@ -559,6 +652,7 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
         advertencias=advertencias,
         bloqueantes=bloqueantes,
         puede_preparar=not bloqueantes,
+        repetidas_e3=repetidas_e3,
         _nombres=nombres,
         _completar=completar,
         _plantillas=plantillas,
@@ -568,6 +662,7 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
         _clasif_e2=clasif_e2,
         _productos_e2=productos_e2,
         _grupo_de=grupo_de,
+        _duplicados=lec.duplicados,
     )
 
 
@@ -615,15 +710,17 @@ def _filas_convertidas(
     tpl: maestro.Plantilla,
 ) -> Iterator[list]:
     cols, filas = maestro.leer(Path(analisis.ruta_maestro))
+    # Experto 3 no lleva cartilla: el mismo color en otra cartilla tambien se salta
+    campos = maestro.CLAVE_FORMULA_E3 if label == E3 else maestro.CLAVE_FORMULA
     vistas: set[tuple] = set()
     for fila in filas:
         nombre = cols.valor(fila, "producto")
         if nombre is None or not str(nombre).strip():
             continue
-        crudo = _crudo(fila)
-        if crudo in vistas:
+        formula = cols.clave_formula(fila, campos)
+        if formula in vistas:
             continue
-        vistas.add(crudo)
+        vistas.add(formula)
         n = nombres[normalizar(nombre)]
         colorantes = maestro.colorantes_por_galon(
             cols.celdas_colorante(fila), maestro.galones(cols.valor(fila, "formato"))
@@ -716,10 +813,18 @@ def preparar_expertos(
             def prog_e1(ev: dict) -> None:
                 total = ev.get("total") or 0
                 frac = min(1.0, (ev.get("leidas") or 0) / total) if total else 1.0
-                _emit(on_progress, fase="progreso", etapa="Experto 1: quitando filas repetidas", pct=2 + int(frac * 13))
+                _emit(on_progress, fase="progreso", etapa="Experto 1: quitando fórmulas duplicadas", pct=2 + int(frac * 13))
 
-            _, quitadas = quitar_filas_repetidas(maestro_path, destino_e1, on_progress=prog_e1 if on_progress else None)
-            advertencias.append(f"Experto 1: se quitaron {_miles(quitadas)} filas repetidas exactas del maestro")
+            _, quitadas = quitar_filas_repetidas(
+                maestro_path,
+                destino_e1,
+                clave=[maestro.COLUMNAS[c] for c in maestro.CLAVE_FORMULA],
+                on_progress=prog_e1 if on_progress else None,
+            )
+            advertencias.append(
+                f"Experto 1: se quitaron {_miles(quitadas)} formulas duplicadas del maestro "
+                "(misma Clasificacion, Producto, Cartilla, Color y Base)"
+            )
         else:
             shutil.copyfile(maestro_path, destino_e1)
         generados[E1] = (destino_e1, analisis.filas_unicas)
@@ -751,10 +856,15 @@ def preparar_expertos(
                 plantilla,
                 destino,
                 _filas_convertidas(analisis, nombres, label, tpl),
-                total=analisis.filas_unicas,
+                total=planes[label].filas,
                 on_progress=prog if on_progress else None,
             )
             generados[label] = (destino, resultado.filas)
+            if label == E3 and analisis.repetidas_e3:
+                advertencias.append(
+                    f"Experto 3: quedaron fuera {_miles(analisis.repetidas_e3)} formulas con el mismo Color y Base "
+                    "en otra cartilla (Experto 3 no lleva cartilla; va la primera)"
+                )
 
         # --- tabla de productos ---
         _emit(on_progress, fase="etapa", etapa=f"Actualizando {tabla.name}", pct=93)
@@ -892,8 +1002,10 @@ def escribir_resumen(destino: Path, analisis: Analisis, resultado: ResultadoPrep
         ("Fecha del ciclo", analisis.fecha.replace("_", "/")),
         ("Experto 1 anterior", analisis.anterior or "-"),
         ("Fórmulas en el maestro", analisis.filas),
-        ("Fórmulas repetidas quitadas", analisis.repetidas),
-        ("Fórmulas que se entregan", analisis.filas_unicas),
+        ("Fórmulas duplicadas quitadas", analisis.repetidas),
+        ("Fórmulas en Experto 1 y 2", analisis.filas_unicas),
+        ("Mismo color en otra cartilla (no van a Experto 3)", analisis.repetidas_e3),
+        ("Fórmulas en Experto 3", analisis.filas_unicas - analisis.repetidas_e3),
         ("Productos en el maestro", analisis.productos),
         ("Productos nuevos", len(analisis.nuevos)),
         ("Productos que ya no vienen", len(analisis.quitados)),
@@ -914,7 +1026,7 @@ def escribir_resumen(destino: Path, analisis: Analisis, resultado: ResultadoPrep
     agregados = {normalizar(a["producto"]): a for a in resultado.productos_agregados}
     hoja(
         "Productos nuevos",
-        ["Línea", "Producto", "Fórmulas", "Repetidas quitadas", "Tiendas", "Nombre Experto 2", "Nombre Experto 3",
+        ["Línea", "Producto", "Fórmulas", "Duplicadas quitadas", "Tiendas", "Nombre Experto 2", "Nombre Experto 3",
          "Formatos", "Cartillas", "Nuevo vs experto anterior"],
         [
             [
@@ -945,6 +1057,18 @@ def escribir_resumen(destino: Path, analisis: Analisis, resultado: ResultadoPrep
             for p in analisis.expertos
         ],
         [12, 34, 34, 10, 10, 80, 40],
+    )
+    hoja(
+        "Duplicadas",
+        ["Producto", "Clasificación", "Cartilla", "Color", "Base", "Fila que queda", "Cartilla que queda",
+         "Fila quitada", "Mismos colorantes", "Se quita de"],
+        [
+            [d.producto, d.clasificacion, d.cartilla, d.color, d.base, d.fila_conservada, d.cartilla_conservada,
+             d.fila_quitada, "sí" if d.misma_formula else "NO",
+             "Experto 3 (no lleva cartilla)" if d.solo_e3 else "Expertos 1, 2 y 3"]
+            for d in analisis._duplicados
+        ],
+        [36, 16, 24, 24, 16, 14, 24, 14, 18, 28],
     )
     hoja(
         "Advertencias",

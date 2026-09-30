@@ -235,6 +235,20 @@ def test_quitar_filas_repetidas(tmp_path):
         ["Tex", "arcilla", "NE-32"],
         ["Tex", "alamo", "OC-1"],
     ]
+    # por columnas clave: la del colorante distinto tambien es duplicada; sin
+    # clave (celdas vacias) se deja siempre
+    otra = tmp_path / "e1_clave.xlsx"
+    src2 = experto_openpyxl(
+        tmp_path / "maestro2.xlsx",
+        ["Producto", "Color", "Col1"],
+        [["Tex", "alamo", "OC-62.8"], ["Tex", "arcilla", "NE-32"], ["TEX ", "Alamo", "OC-1"], [None, None, "x"],
+         [None, None, "x"]],
+    )
+    assert quitar_filas_repetidas(src2, otra, clave=["producto", "Color"]) == (5, 1)
+    assert [f[2] for f in _filas(otra)] == ["Col1", "OC-62.8", "NE-32", "x", "x"]
+    with pytest.raises(FormatoExpertoError, match="Base"):
+        quitar_filas_repetidas(src2, otra, clave=["Producto", "Base"])
+
     with zipfile.ZipFile(destino) as z:
         hoja = z.read("xl/worksheets/sheet1.xml")
         assert re.search(rb'<autoFilter ref="A1:C4"\s*/>', hoja)
