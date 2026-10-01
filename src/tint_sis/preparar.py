@@ -17,7 +17,7 @@ que envia tintometria (vista "Preparar experto" y `cli preparar`).
    una sola vez el mismo color en distintas cartillas (maestro.CLAVE_FORMULA_E3).
 2. `preparar_expertos`, con lo que decide el usuario para cada producto nuevo
    (tiendas y nombres):
-     - agrega esos productos a productos_TINT.xlsx y completa los nombres de
+     - agrega esos productos a homologos_TINT.xlsx y completa los nombres de
        Experto 2/3 que falten (todos los productos del maestro van a los 3);
      - genera Experto_1/2/3_<DD_MM_YYYY> en la carpeta de entrada: E1 es el
        maestro (sin las duplicadas y con las formulas que no vienen en galon

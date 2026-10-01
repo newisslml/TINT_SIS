@@ -164,13 +164,13 @@ def main() -> None:
 
     init_parser = subparsers.add_parser(
         "productos-init",
-        help="Arma productos_TINT.xlsx una vez, desde homologos_TINT.xlsx + xData con ID_TINT + los expertos",
+        help="Arma homologos_TINT.xlsx una vez, desde homologos_TINT_legacy.xlsx + xData con ID_TINT + los expertos",
     )
     init_parser.add_argument("--input", default=None, help="carpeta de entrada (default: config)")
     init_parser.add_argument("--expertos-dir", default=None, help="donde buscar Experto_1/2/3 (default: --input)")
-    init_parser.add_argument("--homologos", default=None, help="default: <input>/homologos_TINT.xlsx")
+    init_parser.add_argument("--homologos", default=None, help="default: <input>/homologos_TINT_legacy.xlsx")
     init_parser.add_argument("--xdata", default=None, help="default: el xData_DATACOMPLETA*.xlsx mas nuevo de <input>")
-    init_parser.add_argument("--salida", default=None, help="default: <input>/productos_TINT.xlsx")
+    init_parser.add_argument("--salida", default=None, help="default: <input>/homologos_TINT.xlsx")
     init_parser.add_argument("--force", action="store_true", help="regenerar aunque ya exista (pisa la revisada)")
 
     prep_parser = subparsers.add_parser(

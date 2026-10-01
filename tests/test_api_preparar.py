@@ -36,8 +36,8 @@ def cfg(tmp_path, monkeypatch):
         ("Experto_1.xls", True),  # va a la entrada para que el preview avise del .xls
         ("Experto_2_28_09_2026.xlsm", True),
         ("Experto_3.xlsx", True),
-        ("productos_TINT.xlsx", True),
         ("homologos_TINT.xlsx", True),
+        ("homologos_TINT_legacy.xlsx", True),
         ("xData_DATACOMPLETA_10_09_2026.xlsx", True),
         ("Todo  MP14 28092026.xlsx", False),
         ("Todo  MP14 28092026 (sin duplicados).xlsx", False),

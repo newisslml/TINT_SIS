@@ -4,7 +4,7 @@ from tint_sis.config import AppConfig, load_config, save_config
 def test_load_config_sin_archivo_devuelve_defaults(tmp_path):
     cfg = load_config(tmp_path / "no_existe.json")
     assert cfg.enabled_grupos == {"MP14", "MP12", "Tiendas 14", "Tiendas 12"}
-    assert cfg.productos_name == "productos_TINT.xlsx"
+    assert cfg.productos_name == "homologos_TINT.xlsx"
     assert cfg.expertos == {
         "Experto 1": "Experto_1*.xlsx",
         "Experto 2": "Experto_2*.xls[xm]",
@@ -46,7 +46,26 @@ def test_archivo_parcial_completa_con_defaults(tmp_path):
     assert cfg.enabled_grupos == {"MP14"}
     assert cfg.expertos["Experto 3"] == "E3*.xlsx"
     assert cfg.expertos["Experto 1"] == "Experto_1*.xlsx"  # default
-    assert cfg.homologos_master_name == "homologos_TINT.xlsx"
+    assert cfg.homologos_master_name == "homologos_TINT_legacy.xlsx"
+
+
+def test_config_con_los_nombres_anteriores_pasa_a_los_nuevos(tmp_path):
+    # hasta la 0.4.0 la tabla era productos_TINT.xlsx y el listado por ID homologos_TINT.xlsx
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"productos_name": "productos_TINT.xlsx", "homologos_master_name": "homologos_TINT.xlsx"}',
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    assert cfg.productos_name == "homologos_TINT.xlsx"
+    assert cfg.homologos_master_name == "homologos_TINT_legacy.xlsx"
+    assert cfg.productos_name != cfg.homologos_master_name
+
+
+def test_nombre_de_tabla_propio_se_respeta(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text('{"productos_name": "mi_tabla.xlsx"}', encoding="utf-8")
+    assert load_config(path).productos_name == "mi_tabla.xlsx"
 
 
 def test_config_viejo_con_expert_glob_se_tolera(tmp_path):
@@ -72,7 +91,7 @@ def test_archivo_corrupto_no_rompe(tmp_path):
     path = tmp_path / "config.json"
     path.write_text("{ no es json", encoding="utf-8")
     cfg = load_config(path)
-    assert cfg.productos_name == "productos_TINT.xlsx"
+    assert cfg.productos_name == "homologos_TINT.xlsx"
 
 
 def test_expertos_habilitados_default_todos_y_roundtrip(tmp_path):

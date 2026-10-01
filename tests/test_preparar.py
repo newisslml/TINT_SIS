@@ -130,12 +130,12 @@ def test_preparar_genera_los_tres_expertos_y_actualiza_la_tabla(entorno):
     )
 
     assert sorted(p.name for p in inp.iterdir()) == [
-        "Experto_1_28_09_2026.xlsx", "Experto_2_28_09_2026.xlsm", "Experto_3_28_09_2026.xlsx", "productos_TINT.xlsx",
+        "Experto_1_28_09_2026.xlsx", "Experto_2_28_09_2026.xlsm", "Experto_3_28_09_2026.xlsx", "homologos_TINT.xlsx",
     ]
     backup = cfg.output_dir.parent / "backups" / "expertos" / "2026-09-28_10-30"
     assert r.backup == str(backup)
     assert sorted(p.name for p in backup.iterdir()) == [
-        "Experto_1_24_09_2026.xlsx", "Experto_2_24_09_2026.xlsm", "Experto_3_24_09_2026.xlsx", "productos_TINT.xlsx",
+        "Experto_1_24_09_2026.xlsx", "Experto_2_24_09_2026.xlsm", "Experto_3_24_09_2026.xlsx", "homologos_TINT.xlsx",
     ]
     # Experto 3 sin el "amarillo" de la otra cartilla
     assert [(x.label, x.filas) for x in r.archivos] == [("Experto 1", 7), ("Experto 2", 7), ("Experto 3", 6)]
@@ -177,7 +177,7 @@ def test_preparar_genera_los_tres_expertos_y_actualiza_la_tabla(entorno):
     assert len(e2) == 8 and e2[7][1:4] == ["Ltx.Habitacional Ceresita", "Texturex", "amarillo"]
 
     # tabla: producto nuevo al final y nombre de Experto 2 completado
-    tabla = _filas(inp / "productos_TINT.xlsx")
+    tabla = _filas(inp / "homologos_TINT.xlsx")
     assert tabla[2][4] == "Ltx. CP-70 Soquina construccion"
     assert tabla[2][10] == "Preparación 28/09/2026"
     assert tabla[4] == [None, "Texturas", "Texturex y Homologos", "Texturex y Homologos", "Texturex y Homologos",
@@ -212,7 +212,7 @@ def test_tabla_abierta_no_cambia_nada(entorno, monkeypatch):
     cfg, maestro = entorno
     antes = sorted(p.name for p in cfg.input_dir.iterdir())
     a = analizar_maestro(maestro, cfg)
-    monkeypatch.setattr(preparar, "_escribible", lambda p: p.name != "productos_TINT.xlsx")
+    monkeypatch.setattr(preparar, "_escribible", lambda p: p.name != "homologos_TINT.xlsx")
     with pytest.raises(PreparacionError, match="abierto"):
         preparar_expertos(a, cfg, ahora=AHORA)
     assert sorted(p.name for p in cfg.input_dir.iterdir()) == antes

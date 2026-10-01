@@ -19,7 +19,7 @@ data/input/
   Experto_1*.xlsx      Color Pro: Col.N-1/48 onzas = "AO-26.5" (código+cantidad juntos), hoja única
   Experto_2*.xls[xm]   Tintwise Lab: Col/Qty separados, cantidades YA en cm³, libro .xlsm con macros
   Experto_3*.xlsx      Santint/Corob: colorant_N / qnt_ml_N en Oz/48, hoja Formulas + IntegrityData
-  productos_TINT.xlsx  tabla de productos (qué tiendas lleva cada producto, nombre en cada experto)
+  homologos_TINT.xlsx  tabla de productos (qué tiendas lleva cada producto, nombre en cada experto)
         │
         ▼  cada experto se lee UNA vez (adapters/sheet_filter.py)
 data/output/Archivos filtrados/<Software>/<Tienda>_ready_<DD_MM_YYYY>.<ext>
@@ -43,10 +43,11 @@ corrigió a Tiendas 14.
 
 - **Filtro por PRODUCTO, no por ID_TINT.** Los 3 expertos no están alineados
   (distintas filas, orden y nombres de producto) y ninguno trae ID. En
-  `homologos_TINT.xlsx` cada tienda toma productos completos (0 productos a
-  medias) y cada homólogo `SUBP####` = 1 producto, así que una fila por producto
-  en `productos_TINT.xlsx` alcanza. Con IDs se perdían fórmulas nuevas en
-  silencio (p. ej. Látex/Extracubriente: 4.666 fórmulas en E3 vs 4.084 IDs).
+  el listado por ID anterior (`homologos_TINT_legacy.xlsx`) cada tienda toma
+  productos completos (0 productos a medias) y cada homólogo `SUBP####` = 1
+  producto, así que una fila por producto en `homologos_TINT.xlsx` alcanza. Con
+  IDs se perdían fórmulas nuevas en silencio (p. ej. Látex/Extracubriente: 4.666
+  fórmulas en E3 vs 4.084 IDs).
 - **Clave de producto:** Experto 1 y 2 → columna `Producto` (en E2 `Clasificacion`
   viene desalineada, no usarla); Experto 3 → `group_code / product_code`. Se
   ubican por encabezado. Comparación sin acentos, mayúsculas ni espacios
@@ -91,6 +92,17 @@ corrigió a Tiendas 14.
 - **No adivinar formatos de software**: todo formato nuevo se valida contra un
   archivo de referencia real. El CSV de Color Pro 3.1.1 (ISO-8859-1, coma, CRLF,
   celdas `AO-26.5` tal cual) todavía no tiene referencia real.
+- **Nombre de la tabla de productos** (pedido 2026-10-01: "cambia el nombre del archivo de
+  productos_tint a homologos_tint"): `productos_TINT.xlsx` → **`homologos_TINT.xlsx`**
+  (`expertos.PRODUCTOS_NAME`; el campo del config sigue llamándose `productos_name`).
+  El `homologos_TINT.xlsx` anterior (listado por ID_TINT del flujo viejo, 7,6 MB del
+  03/09) lo **borró el usuario a pedido** para dejar su lugar a la tabla; el nombre del
+  flujo legacy pasó a `homologos_TINT_legacy.xlsx` (`routing.HOMOLOGOS_MASTER_NAME`,
+  config `homologos_master_name`), así `productos-init` nunca toma la tabla por fuente.
+  `AppConfig.from_dict` migra los dos nombres viejos si un `config.json` ya guardado
+  los trae escritos (el real los traía). El archivo físico no se renombra solo en otros
+  PCs: el manual 0.4.1 (sección 3.1) pide renombrarlo a mano y sacar antes un
+  `homologos_TINT.xlsx` viejo. Carpeta `backups/productos/` de Homólogos sin cambios.
 - **Preparar experto desde el maestro** (pedido y decisiones del usuario
   2026-09-28; `preparar.py`, `maestro.py`, `adapters/libro_writer.py`):
   - El maestro = formato E1. Reglas E1→E2/E3 **verificadas contra los expertos
@@ -228,7 +240,7 @@ corrigió a Tiendas 14.
   paleta Codelpa de `paleta_colores_TINT_SIS.md`, fondo claro sin degradado y modo
   oscuro automático con `prefers-color-scheme`; colores nuevos siempre como token).
 - Vista **Homólogos** (`js/views/homologos.js`, pedido del usuario 2026-09-28) =
-  editor de `productos_TINT.xlsx`: agrupado por línea, nombre por experto con
+  editor de `homologos_TINT.xlsx`: agrupado por línea, nombre por experto con
   fórmulas contadas contra los expertos del ciclo, casillas de tienda,
   agregar producto / nueva línea, eliminar, "productos de los expertos que no
   están en la tabla". Copia de trabajo en el navegador; `PUT /api/productos`
@@ -238,20 +250,20 @@ corrigió a Tiendas 14.
   rechaza si cambió en disco desde la versión leída o si está abierta en Excel).
   `GET /api/productos/catalogo` = `contar_claves` de cada experto, cacheado por
   mtime. Salir con cambios sin guardar pregunta (`main.js`: una vista puede
-  devolver `{cleanup, puedeSalir}`). El editor viejo de `homologos_TINT.xlsx`
+  devolver `{cleanup, puedeSalir}`). El editor viejo de `homologos_TINT_legacy.xlsx`
   por ID_TINT y sus rutas `/api/homologos/*` se quitaron.
-- Flujo anterior, solo para `productos-init` (legacy): `homologos_TINT.xlsx`,
+- Flujo anterior, solo para `productos-init` (legacy): `homologos_TINT_legacy.xlsx`,
   `xData_DATACOMPLETA_*.xlsx`, `adapters/homologos_filter.py`
   (`read_homologos_ids`, `read_expert_ids`), `adapters/homologos_editor.py`.
 
 ## Comandos
 
 ```powershell
-.venv\Scripts\python -m pytest -q tests                  # 187 tests
+.venv\Scripts\python -m pytest -q tests                  # 189 tests
 .venv\Scripts\python -m tint_sis.cli preparar "<maestro>.xlsx" --solo-analizar   # resumen (~1 min)
 .venv\Scripts\python -m tint_sis.cli preparar "<maestro>.xlsx" --tiendas todas   # genera E1/E2/E3 (~3 min en total)
 .venv\Scripts\python -m tint_sis.cli run                 # ciclo completo (~90 s con los 3 expertos)
-.venv\Scripts\python -m tint_sis.cli productos-init      # arma productos_TINT.xlsx (no sobrescribe; --force)
+.venv\Scripts\python -m tint_sis.cli productos-init      # arma homologos_TINT.xlsx (no sobrescribe; --force)
 .venv\Scripts\python -m tint_sis.app --browser           # app en el navegador
 # servidor suelto (como se viene usando): puerto fijo 8765
 .venv\Scripts\python -c "import uvicorn; from tint_sis.app.server import app; uvicorn.run(app, host='127.0.0.1', port=8765)"
@@ -318,9 +330,15 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # .exe + instalador
   Experto 2 faltante → avisos "Ciclo terminado" y "Falta un experto" en naranjo
   y 2 notificaciones de Windows fijas (ícono desde `_internal\assets`). El
   parpadeo de la barra de tareas no se verificó a ojo.
+- **Versión 0.4.1** (01/10/2026, sin commit ni instalador todavía): solo el cambio de
+  nombre de la tabla (arriba). `__version__` = 0.4.1; manual
+  `MANUAL_USUARIO_TINT_SIS_0.4.1.md` (repo, sin versionar). Falta armar el paquete
+  `dist/TINT_SIS_0.4.1_instalacion` con la tabla ya renombrada en `TINT_SIS\input`
+  (el de 0.4.0 trae `productos_TINT.xlsx`). Las guías `GUIA_USO.md`, el manual 0.4.0 y
+  demás .md de la raíz aparecían borrados del working tree el 01/10 (siguen en git).
 - **En curso:** el usuario prueba las importaciones de cada archivo filtrado en su
   software; los ajustes que salgan se corrigen sobre la marcha.
-- Revisar `productos_TINT.xlsx`: ~20 filas con nota en `Revisar` (nombres
+- Revisar `homologos_TINT.xlsx`: ~20 filas con nota en `Revisar` (nombres
   sugeridos de E2/E1).
 - "Tecnoconstrucción Mate Sipa" (E.A., 3.124 fórmulas en E1/E2/E3) está en la
   tabla sin tiendas: no va a ninguna hasta que el usuario lo marque (por eso MP14

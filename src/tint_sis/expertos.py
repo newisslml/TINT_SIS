@@ -8,7 +8,7 @@ Hay 3 archivos expertos, cada uno en el formato que pide un grupo de softwares:
 
 Ninguno trae un ID por formula y no estan alineados fila a fila (distintas filas,
 orden y nombres de producto), asi que el cruce contra las tiendas se hace por
-PRODUCTO: la tabla productos_TINT.xlsx (adapters/productos.py) dice que tiendas
+PRODUCTO: la tabla homologos_TINT.xlsx (adapters/productos.py) dice que tiendas
 lleva cada producto y como se llama en cada experto. Aca se define, por experto,
 que columnas forman esa clave de producto (se ubican por encabezado, no por
 posicion) y, por software, de que experto sale y que tiendas recibe.
@@ -26,8 +26,9 @@ from dataclasses import dataclass
 # productos esta completa para ellos (no se adivina).
 ENABLED_GRUPOS = {"MP14", "MP12", "Tiendas 14", "Tiendas 12"}
 
-# Nombre fijo de la tabla de productos en la carpeta de entrada.
-PRODUCTOS_NAME = "productos_TINT.xlsx"
+# Nombre fijo de la tabla de productos en la carpeta de entrada (hasta la 0.4.0
+# se llamaba productos_TINT.xlsx; `config.AppConfig.from_dict` migra el nombre viejo).
+PRODUCTOS_NAME = "homologos_TINT.xlsx"
 
 # Carpeta (dentro de la salida) donde van las subcarpetas por software.
 FILTRADOS_DIRNAME = "Archivos filtrados"
@@ -39,7 +40,7 @@ KEY_SEP = " / "
 
 @dataclass(frozen=True)
 class ExpertoDef:
-    label: str  # tambien es el encabezado de su columna en productos_TINT.xlsx
+    label: str  # tambien es el encabezado de su columna en homologos_TINT.xlsx
     key_headers: tuple[str, ...]  # encabezados (normalizados) que forman la clave de producto
     default_glob: str
 

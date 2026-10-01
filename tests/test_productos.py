@@ -8,7 +8,7 @@ from tint_sis.expertos import normalizar
 
 def test_leer_tabla_rutas_por_experto_y_tienda(tmp_path):
     path = tabla_productos(
-        tmp_path / "productos_TINT.xlsx",
+        tmp_path / "homologos_TINT.xlsx",
         [
             ["SUBP0004", "Látex", "Habitacional Ceresita", "Ltx. Habitacional Ceresita",
              "Ltx. Habitacional Ceresita", "Látex / Habitacional", "x", "X", "sí", None, "revisar esto"],
@@ -34,7 +34,7 @@ def test_leer_tabla_rutas_por_experto_y_tienda(tmp_path):
 
 def test_leer_tabla_mismo_nombre_en_dos_filas_avisa_y_une(tmp_path):
     path = tabla_productos(
-        tmp_path / "productos_TINT.xlsx",
+        tmp_path / "homologos_TINT.xlsx",
         [
             ["S1", "Oleos", "A", None, "Oleo X", None, "x", None, None, None],
             ["S2", "Oleos", "B", None, "Oleo  X", None, None, "x", None, None],
@@ -46,7 +46,7 @@ def test_leer_tabla_mismo_nombre_en_dos_filas_avisa_y_une(tmp_path):
 
 
 def _homologos(path):
-    """homologos_TINT.xlsx con la estructura real: tabla de lineas, secciones,
+    """homologos_TINT_legacy.xlsx con la estructura real: tabla de lineas, secciones,
     homologos y una fila por ID_TINT (ver adapters/homologos_editor.py)."""
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
@@ -73,7 +73,7 @@ def _homologos(path):
 
 
 def test_bootstrap_arma_la_tabla_desde_homologos_xdata_y_expertos(tmp_path):
-    homologos = _homologos(tmp_path / "homologos_TINT.xlsx")
+    homologos = _homologos(tmp_path / "homologos_TINT_legacy.xlsx")
     xdata = experto_openpyxl(
         tmp_path / "xData_DATACOMPLETA_03_09_2026.xlsx",
         ["ID_TINT", "group_code", "product_code", "color_key1"],
@@ -102,7 +102,7 @@ def test_bootstrap_arma_la_tabla_desde_homologos_xdata_y_expertos(tmp_path):
             ["Látex ", "Nuevo Pendiente", "rojo", "Media", "RJ", 1],
         ],
     )
-    destino = tmp_path / "productos_TINT.xlsx"
+    destino = tmp_path / "homologos_TINT.xlsx"
     resumen = bootstrap_tabla(
         homologos, xdata, {"Experto 1": None, "Experto 2": e2, "Experto 3": e3}, destino
     )
@@ -138,7 +138,7 @@ def test_bootstrap_arma_la_tabla_desde_homologos_xdata_y_expertos(tmp_path):
 
 
 def test_bootstrap_no_sobreescribe(tmp_path):
-    destino = tmp_path / "productos_TINT.xlsx"
+    destino = tmp_path / "homologos_TINT.xlsx"
     destino.write_bytes(b"revisada")
     with pytest.raises(FileExistsError):
         bootstrap_tabla(_homologos(tmp_path / "h.xlsx"), None, {}, destino)

@@ -54,7 +54,7 @@ def test_resultados_e_historial_listan_las_advertencias_guardadas(tmp_path, monk
     monkeypatch.setattr(api, "_cfg", lambda: cfg)
     monkeypatch.setattr(api._runner, "last_summary", lambda: None)  # como despues de reabrir la app
     avisos = [
-        {"texto": "Experto_1.xlsx: 9 filas de 2 producto(s) que no estan en productos_TINT.xlsx",
+        {"texto": "Experto_1.xlsx: 9 filas de 2 producto(s) que no estan en homologos_TINT.xlsx",
          "detalle": ["Nuevo A (5 filas)", "Nuevo B (4 filas)"], "tipo": ""},
         {"texto": "Falta Experto 2", "detalle": [], "tipo": "experto"},
     ]

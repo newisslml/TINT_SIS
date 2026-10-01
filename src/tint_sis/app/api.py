@@ -27,7 +27,7 @@ from . import _avisos, _preparar, _runner
 # (<data>/maestros, hermana de la carpeta de entrada): no van a la entrada, que
 # solo tiene lo que usa el ciclo.
 MAESTROS_DIRNAME = "maestros"
-# Copias de productos_TINT.xlsx que deja cada guardado desde la vista Homologos
+# Copias de homologos_TINT.xlsx que deja cada guardado desde la vista Homologos
 RESPALDO_PRODUCTOS_DIRNAME = "productos"
 
 router = APIRouter()
@@ -495,7 +495,7 @@ def post_preparar_reiniciar() -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# homologos: la tabla de productos (productos_TINT.xlsx)
+# homologos: la tabla de productos (homologos_TINT.xlsx)
 # --------------------------------------------------------------------------- #
 def _tabla_productos(cfg: AppConfig) -> Path:
     path = Path(cfg.input_dir) / cfg.productos_name

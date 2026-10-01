@@ -19,7 +19,7 @@ def entrada(tmp_path):
     inp = tmp_path / "input"
     inp.mkdir()
     tabla_productos(
-        inp / "productos_TINT.xlsx",
+        inp / "homologos_TINT.xlsx",
         [
             ["SUBP0004", "Látex", "Habitacional Ceresita", "Ltx. Habitacional Ceresita",
              "Ltx.Habitacional Ceresita", "Látex / Habitacional", "x", "x", "x", "x"],
@@ -126,7 +126,7 @@ def test_cada_tienda_recibe_solo_sus_productos(tmp_path, entrada):
 
 def test_avisa_productos_que_no_estan_en_la_tabla(tmp_path, entrada):
     summary = run_pipeline(input_dir=entrada, output_dir=tmp_path / "o", db_path=tmp_path / "t.db")
-    avisos = [a for a in summary.advertencias if "no estan en productos_TINT.xlsx" in a.texto]
+    avisos = [a for a in summary.advertencias if "no estan en homologos_TINT.xlsx" in a.texto]
     assert len(avisos) == 1
     assert "Experto_3_22_09_2026.xlsx: 1 filas de 1 producto(s)" in avisos[0].texto
     # el detalle nombra a todos los productos, con sus filas
@@ -220,7 +220,7 @@ def test_registra_los_archivos_en_la_base(tmp_path, entrada):
 
 
 def test_sin_tabla_de_productos_no_genera_nada(tmp_path, entrada):
-    (entrada / "productos_TINT.xlsx").unlink()
+    (entrada / "homologos_TINT.xlsx").unlink()
     summary = run_pipeline(input_dir=entrada, output_dir=tmp_path / "o", db_path=tmp_path / "t.db")
     assert summary.archivos == []
     assert any("tabla de productos" in w for w in summary.ingestion_warnings)

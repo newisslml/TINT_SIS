@@ -15,7 +15,7 @@ from tint_sis.expertos import normalizar
 
 
 def _tabla(path):
-    """productos_TINT.xlsx con una columna Notas y las hojas Sin asignar y Leeme."""
+    """homologos_TINT.xlsx con una columna Notas y las hojas Sin asignar y Leeme."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Productos"
@@ -44,7 +44,7 @@ def _filas(path, hoja="Productos"):
 
 
 def test_leer_para_editar(tmp_path):
-    t = leer_para_editar(_tabla(tmp_path / "productos_TINT.xlsx"))
+    t = leer_para_editar(_tabla(tmp_path / "homologos_TINT.xlsx"))
     assert t["tiendas"] == ["MP14", "MP12", "Tiendas 14", "Tiendas 12"]
     assert t["version"]
     hab, opaco, mate = t["filas"]
@@ -59,7 +59,7 @@ def test_leer_para_editar(tmp_path):
 
 
 def test_guardar_edicion_marca_agrega_y_elimina(tmp_path):
-    path = _tabla(tmp_path / "productos_TINT.xlsx")
+    path = _tabla(tmp_path / "homologos_TINT.xlsx")
     t = leer_para_editar(path)
     hab, opaco, mate = t["filas"]
     mate["tiendas"] = ["MP14"]  # ahora va a MP14
@@ -92,7 +92,7 @@ def test_guardar_edicion_marca_agrega_y_elimina(tmp_path):
 
 
 def test_guardar_edicion_no_pisa_cambios_en_disco(tmp_path):
-    path = _tabla(tmp_path / "productos_TINT.xlsx")
+    path = _tabla(tmp_path / "homologos_TINT.xlsx")
     t = leer_para_editar(path)
     with pytest.raises(TablaCambiadaError):
         guardar_edicion(path, t["filas"], version="123", respaldo_dir=tmp_path / "bk")
@@ -108,7 +108,7 @@ def test_guardar_edicion_no_pisa_cambios_en_disco(tmp_path):
     ],
 )
 def test_guardar_edicion_valida(tmp_path, cambio, error):
-    path = _tabla(tmp_path / "productos_TINT.xlsx")
+    path = _tabla(tmp_path / "homologos_TINT.xlsx")
     t = leer_para_editar(path)
     cambio(t["filas"])
     antes = path.read_bytes()
@@ -120,7 +120,7 @@ def test_guardar_edicion_valida(tmp_path, cambio, error):
 def test_api_productos_y_catalogo(tmp_path, monkeypatch):
     inp = tmp_path / "data" / "input"
     inp.mkdir(parents=True)
-    _tabla(inp / "productos_TINT.xlsx")
+    _tabla(inp / "homologos_TINT.xlsx")
     experto_openpyxl(
         inp / "Experto_1_28_09_2026.xlsx",
         HEADER_E1,
@@ -134,7 +134,7 @@ def test_api_productos_y_catalogo(tmp_path, monkeypatch):
     api._catalogo_cache.clear()
 
     t = api.get_productos()
-    assert t["archivo"] == "productos_TINT.xlsx" and len(t["filas"]) == 3
+    assert t["archivo"] == "homologos_TINT.xlsx" and len(t["filas"]) == 3
 
     cat = api.get_productos_catalogo()["expertos"]
     assert cat["Experto 1"]["productos"] == {"Ltx. Habitacional Ceresita": 1, "Texturex y Homologos": 1}
@@ -144,7 +144,7 @@ def test_api_productos_y_catalogo(tmp_path, monkeypatch):
     filas = t["filas"][:1]  # se eliminan Opaco y Tecnoconstruccion Mate
     r = api.put_productos({"version": t["version"], "filas": filas})
     assert r["guardado"] and len(r["filas"]) == 1
-    assert "backups" in r["respaldo"] and r["respaldo"].endswith("productos_TINT.xlsx")
+    assert "backups" in r["respaldo"] and r["respaldo"].endswith("homologos_TINT.xlsx")
 
     with pytest.raises(HTTPException) as exc:  # la version vieja ya no sirve
         api.put_productos({"version": t["version"], "filas": filas})

@@ -29,6 +29,14 @@ from tint_sis.routing import HOMOLOGOS_MASTER_NAME as _DEFAULT_HOMOLOGOS_NAME
 
 _DEFAULT_DATA = default_data_dir()
 
+# Nombres que eran el default hasta la 0.4.0 y que un config.json ya guardado
+# trae escritos: la tabla de productos pasó de productos_TINT.xlsx a
+# homologos_TINT.xlsx, y el listado por ID del flujo anterior (que se llamaba así)
+# a homologos_TINT_legacy.xlsx. Sin esto el config viejo seguiría buscando la
+# tabla con el nombre anterior y las dos entradas apuntarían al mismo archivo.
+_PRODUCTOS_NAME_ANTERIOR = "productos_TINT.xlsx"
+_HOMOLOGOS_MASTER_ANTERIOR = "homologos_TINT.xlsx"
+
 
 def default_config_path() -> Path:
     return app_data_dir() / "config.json"
@@ -101,19 +109,25 @@ class AppConfig:
         base = cls()
         expertos = dict(base.expertos)
         expertos.update({k: str(v) for k, v in (data.get("expertos") or {}).items() if k in EXPERTOS})
+        productos_name = data.get("productos_name", base.productos_name)
+        if productos_name == _PRODUCTOS_NAME_ANTERIOR:
+            productos_name = base.productos_name
+        homologos_master_name = data.get("homologos_master_name", base.homologos_master_name)
+        if homologos_master_name == _HOMOLOGOS_MASTER_ANTERIOR:
+            homologos_master_name = base.homologos_master_name
         return cls(
             input_dir=Path(data.get("input_dir", base.input_dir)),
             output_dir=Path(data.get("output_dir", base.output_dir)),
             db_path=Path(data.get("db_path", base.db_path)),
             enabled_grupos=set(data.get("enabled_grupos", base.enabled_grupos)),
-            productos_name=data.get("productos_name", base.productos_name),
+            productos_name=productos_name,
             expertos=expertos,
             expertos_habilitados={
                 e for e in data.get("expertos_habilitados", base.expertos_habilitados) if e in EXPERTOS
             },
             softwares=_softwares_validos(data.get("softwares"), base.softwares),
             filtrados_dirname=data.get("filtrados_dirname", base.filtrados_dirname),
-            homologos_master_name=data.get("homologos_master_name", base.homologos_master_name),
+            homologos_master_name=homologos_master_name,
             delivery_paths=dict(data.get("delivery_paths", base.delivery_paths)),
             notificaciones=bool(data.get("notificaciones", base.notificaciones)),
         )

@@ -88,7 +88,7 @@ def test_falta_un_experto_se_notifica_aparte_en_naranjo(monkeypatch):
         [
             Advertencia("Falta Experto 2 (Experto_2*.xls[xm]) en la carpeta de entrada: se omiten Tinwise_Lab",
                         tipo=TIPO_EXPERTO),
-            Advertencia("Experto_1.xlsx: 4 filas de 1 producto(s) que no estan en productos_TINT.xlsx", ["X (4 filas)"]),
+            Advertencia("Experto_1.xlsx: 4 filas de 1 producto(s) que no estan en homologos_TINT.xlsx", ["X (4 filas)"]),
         ],
     )
     assert [(a["titulo"], a["nivel"]) for a in avisos] == [

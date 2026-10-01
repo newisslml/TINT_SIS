@@ -12,10 +12,12 @@ from pathlib import Path
 # trae, por mtime).
 _EXPERT_DATE_RE = re.compile(r"_(?P<d>\d{2})_(?P<m>\d{2})_(?P<y>\d{4})$")
 
-# Flujo anterior (cruce por ID_TINT): homologos_TINT.xlsx + el experto xData con
-# la columna ID_TINT. Ya no participa del ciclo; lo usan el editor de homologos
-# (cobertura) y `cli productos-init` para armar la tabla de productos.
-HOMOLOGOS_MASTER_NAME = "homologos_TINT.xlsx"
+# Flujo anterior (cruce por ID_TINT): el listado de homologos por ID + el experto
+# xData con la columna ID_TINT. Ya no participa del ciclo; lo usan el editor de
+# homologos (cobertura) y `cli productos-init` para armar la tabla de productos.
+# Se llamaba homologos_TINT.xlsx, pero ese nombre paso a ser el de la tabla de
+# productos (expertos.PRODUCTOS_NAME): el listado por ID lleva sufijo _legacy.
+HOMOLOGOS_MASTER_NAME = "homologos_TINT_legacy.xlsx"
 EXPERT_MASTER_GLOB = "xData_DATACOMPLETA*.xlsx"
 
 
@@ -72,7 +74,7 @@ def find_homologos_master_pair(
     master_name: str = HOMOLOGOS_MASTER_NAME,
     expert_glob: str = EXPERT_MASTER_GLOB,
 ) -> HomologosExpertPair | None:
-    """Empareja el homologos maestro fijo (homologos_TINT.xlsx) con el experto
+    """Empareja el homologos maestro fijo (homologos_TINT_legacy.xlsx) con el experto
     xData mas reciente (xData_DATACOMPLETA*.xlsx). Devuelve None si falta
     cualquiera de los dos."""
     input_dir = Path(input_dir)

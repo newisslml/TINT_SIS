@@ -41,7 +41,7 @@ def carpeta_preparacion(base: Path) -> tuple[Path, Path]:
     inp = base / "input"
     inp.mkdir(parents=True)
     tabla_productos(
-        inp / "productos_TINT.xlsx",
+        inp / "homologos_TINT.xlsx",
         [
             ["SUBP0004", "Látex", "Habitacional Ceresita", "Ltx. Habitacional Ceresita",
              "Ltx.Habitacional Ceresita", "Látex / Habitacional", "x", "x", "x", "x"],
@@ -236,7 +236,7 @@ def experto_xlsm_a_mano(path: Path, filas: list[list], *, calc_chain_datos: bool
 
 
 def tabla_productos(path: Path, filas: list[list], tiendas=("MP14", "MP12", "Tiendas 14", "Tiendas 12")) -> Path:
-    """productos_TINT.xlsx: [SUBP, Linea, Producto, Experto 1, Experto 2, Experto 3, *marcas por tienda]."""
+    """homologos_TINT.xlsx: [SUBP, Linea, Producto, Experto 1, Experto 2, Experto 3, *marcas por tienda]."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Productos"

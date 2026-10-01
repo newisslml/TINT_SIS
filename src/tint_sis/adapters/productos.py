@@ -1,7 +1,8 @@
-"""Tabla de productos (productos_TINT.xlsx): que tiendas lleva cada producto y
+"""Tabla de productos (homologos_TINT.xlsx): que tiendas lleva cada producto y
 como se llama ese producto en cada archivo experto.
 
-Reemplaza al cruce por ID_TINT: en homologos_TINT.xlsx cada tienda toma
+Reemplaza al cruce por ID_TINT: en el listado por ID anterior
+(homologos_TINT_legacy.xlsx) cada tienda toma
 productos completos (ningun producto a medias) y cada homologo (SUBP####) es
 exactamente un producto, asi que alcanza con una fila por producto. Los
 expertos se cargan tal como llegan, sin IDs.
@@ -21,7 +22,7 @@ Un producto que esta en la tabla sin ninguna tienda marcada se considera
 conocido y no se entrega; uno que un experto trae y no esta en la tabla se
 avisa como "sin asignar" en cada ciclo (nunca se descarta en silencio).
 
-`bootstrap_tabla` arma la primera version a partir de homologos_TINT.xlsx
+`bootstrap_tabla` arma la primera version a partir de homologos_TINT_legacy.xlsx
 (tiendas por producto), el xData_DATACOMPLETA con ID_TINT (nombre exacto en
 Experto 3) y los catalogos de los expertos (nombres sugeridos en Experto 1/2,
 marcados para revisar).
@@ -583,7 +584,7 @@ def bootstrap_tabla(
     tiendas: list[str] | None = None,
     on_log: Callable[[str], None] | None = None,
 ) -> ResumenBootstrap:
-    """Genera productos_TINT.xlsx en `destino` (no sobreescribe: si existe,
+    """Genera homologos_TINT.xlsx en `destino` (no sobreescribe: si existe,
     lanza FileExistsError). `expertos` mapea label -> archivo experto (.xlsx /
     .xlsm) o None si no esta disponible."""
     log = on_log or (lambda _msg: None)

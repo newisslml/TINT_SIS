@@ -24,18 +24,18 @@ def test_find_latest_expert_sin_fecha_usa_el_archivo(tmp_path):
 
 
 def test_maestro_empareja_homologos_tint_con_xdata(tmp_path):
-    (tmp_path / "homologos_TINT.xlsx").touch()
+    (tmp_path / "homologos_TINT_legacy.xlsx").touch()
     (tmp_path / "xData_DATACOMPLETA_03_09_2026.xlsx").touch()
 
     pair = find_homologos_master_pair(tmp_path)
 
     assert pair is not None
-    assert pair.homologos_path == tmp_path / "homologos_TINT.xlsx"
+    assert pair.homologos_path == tmp_path / "homologos_TINT_legacy.xlsx"
     assert pair.expert_path == tmp_path / "xData_DATACOMPLETA_03_09_2026.xlsx"
 
 
 def test_maestro_toma_el_experto_de_fecha_mas_nueva(tmp_path):
-    (tmp_path / "homologos_TINT.xlsx").touch()
+    (tmp_path / "homologos_TINT_legacy.xlsx").touch()
     (tmp_path / "xData_DATACOMPLETA_03_09_2026.xlsx").touch()
     (tmp_path / "xData_DATACOMPLETA_18_09_2026.xlsx").touch()
     (tmp_path / "xData_DATACOMPLETA_25_08_2026.xlsx").touch()
@@ -49,10 +49,10 @@ def test_maestro_toma_el_experto_de_fecha_mas_nueva(tmp_path):
 def test_maestro_sin_homologos_o_sin_experto_devuelve_none(tmp_path):
     assert find_homologos_master_pair(tmp_path) is None
 
-    (tmp_path / "homologos_TINT.xlsx").touch()
+    (tmp_path / "homologos_TINT_legacy.xlsx").touch()
     assert find_homologos_master_pair(tmp_path) is None  # falta el experto
 
-    (tmp_path / "homologos_TINT.xlsx").unlink()
+    (tmp_path / "homologos_TINT_legacy.xlsx").unlink()
     (tmp_path / "xData_DATACOMPLETA_03_09_2026.xlsx").touch()
     assert find_homologos_master_pair(tmp_path) is None  # falta el homologos
 

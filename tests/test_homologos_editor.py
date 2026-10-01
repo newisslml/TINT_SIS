@@ -10,7 +10,7 @@ from tint_sis.adapters.homologos_editor import (
 
 
 def _build_sample(path):
-    """Reproduce la estructura real de homologos_TINT.xlsx: titulo, tabla de
+    """Reproduce la estructura real de homologos_TINT_legacy.xlsx: titulo, tabla de
     lineas (catalogo), y por cada linea una seccion con encabezado de metadatos
     ("ID,C,5" ...), filas de homologo y filas de ID_TINT debajo. Incluye un
     homologo pendiente (sin IDs) como el que ya existe en el archivo real."""
@@ -51,7 +51,7 @@ def _build_sample(path):
 
 @pytest.fixture
 def sample_path(tmp_path):
-    path = tmp_path / "homologos_TINT.xlsx"
+    path = tmp_path / "homologos_TINT_legacy.xlsx"
     _build_sample(path)
     return path
 

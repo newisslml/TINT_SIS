@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { h, card, btn, tag, modal } from "../dom.js";
 
-// Homólogos = la tabla de productos (productos_TINT.xlsx) que usa el ciclo para
+// Homólogos = la tabla de productos (homologos_TINT.xlsx) que usa el ciclo para
 // filtrar: una fila por producto (homólogo), su línea, cómo se llama en cada
 // archivo experto y qué tiendas lo llevan. Se edita acá en una copia de trabajo;
 // "Guardar cambios" reescribe la tabla (con copia de respaldo de la anterior).
@@ -32,7 +32,7 @@ export async function render(view) {
       "p",
       { class: "muted" },
       "Cada fila es un producto (homólogo): su línea, cómo se llama en cada archivo experto y qué tiendas lo llevan. " +
-        "Es la tabla productos_TINT.xlsx con la que el ciclo filtra; un producto sin tiendas marcadas no se entrega."
+        "Es la tabla homologos_TINT.xlsx con la que el ciclo filtra; un producto sin tiendas marcadas no se entrega."
     )
   );
 
@@ -378,7 +378,7 @@ export async function render(view) {
       ...EXPERTOS.map((e) => campo(e, iNombres[e])),
       h("div", { class: "resumen__label" }, "Tiendas que lo llevan"),
       h("div", { class: "checks-inline" }, ...checks.map(([t, input]) => h("label", {}, input, t))),
-      h("div", { class: "resumen__pie" }, "Se agrega a la copia de trabajo; queda en productos_TINT.xlsx al pulsar «Guardar cambios».")
+      h("div", { class: "resumen__pie" }, "Se agrega a la copia de trabajo; queda en homologos_TINT.xlsx al pulsar «Guardar cambios».")
     );
     const pendiente = modal(
       form,

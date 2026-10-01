@@ -1,6 +1,8 @@
-"""Parser y editor de `homologos_TINT.xlsx` para la vista /homologos de la app.
+"""Parser y editor del listado de homologos por ID (flujo anterior, hoy
+`homologos_TINT_legacy.xlsx`; el nombre `homologos_TINT.xlsx` es ahora el de la
+tabla de productos).
 
-El archivo real (confirmado corriendo esto contra `data/input/homologos_TINT.xlsx`,
+El archivo real (confirmado corriendo esto contra el listado por ID,
 4 hojas de hasta ~186k filas) sigue, por hoja, esta estructura de bloques:
 
   fila 0        titulo ("LISTADO PRODUCTOS HOMOLOGOS ...")

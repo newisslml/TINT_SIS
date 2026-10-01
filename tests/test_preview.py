@@ -18,7 +18,7 @@ def _xlsx(path, sheet="Hoja"):
 
 
 def _completa(cfg):
-    _xlsx(cfg.input_dir / "productos_TINT.xlsx", "Productos")
+    _xlsx(cfg.input_dir / "homologos_TINT.xlsx", "Productos")
     _xlsx(cfg.input_dir / "Experto_1_07_09_2026.xlsx")
     _xlsx(cfg.input_dir / "Experto_2_15_09_2026.xlsm", "Formulas")
     _xlsx(cfg.input_dir / "Experto_3_22_09_2026.xlsx", "Formulas")
@@ -37,18 +37,18 @@ def test_preview_clasifica_tabla_expertos_y_basura(tmp_path):
     cfg = _cfg(tmp_path)
     _completa(cfg)
     _xlsx(cfg.input_dir / "lista_precios.xlsx")
-    _xlsx(cfg.input_dir / "homologos_TINT.xlsx", "MP12")
+    _xlsx(cfg.input_dir / "homologos_TINT_legacy.xlsx", "MP12")
 
     prev = preview_batch(cfg)
     por_archivo = {a.archivo: a for a in prev.archivos}
 
     assert prev.puede_ejecutar is True
-    assert prev.productos_activo == "productos_TINT.xlsx"
-    assert por_archivo["productos_TINT.xlsx"].flujo == "Tabla de productos"
+    assert prev.productos_activo == "homologos_TINT.xlsx"
+    assert por_archivo["homologos_TINT.xlsx"].flujo == "Tabla de productos"
     e3 = por_archivo["Experto_3_22_09_2026.xlsx"]
     assert (e3.estado, e3.flujo, e3.software) == ("ok", "Experto 3", "Santint, Corob_Tint")
     assert por_archivo["Experto_2_15_09_2026.xlsm"].software == "Tinwise_Lab"
-    assert por_archivo["homologos_TINT.xlsx"].estado == "no-habilitado"
+    assert por_archivo["homologos_TINT_legacy.xlsx"].estado == "no-habilitado"
     assert por_archivo["lista_precios.xlsx"].estado == "error"
     assert [(e.label, e.estado) for e in prev.expertos] == [
         ("Experto 1", "ok"),
