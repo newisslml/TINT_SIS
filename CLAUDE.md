@@ -330,12 +330,15 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # .exe + instalador
   Experto 2 faltante → avisos "Ciclo terminado" y "Falta un experto" en naranjo
   y 2 notificaciones de Windows fijas (ícono desde `_internal\assets`). El
   parpadeo de la barra de tareas no se verificó a ojo.
-- **Versión 0.4.1** (01/10/2026, sin commit ni instalador todavía): solo el cambio de
+- **Versión 0.4.1** (01/10/2026, commit b874c82 en `main`, pusheado): solo el cambio de
   nombre de la tabla (arriba). `__version__` = 0.4.1; manual
-  `MANUAL_USUARIO_TINT_SIS_0.4.1.md` (repo, sin versionar). Falta armar el paquete
+  `MANUAL_USUARIO_TINT_SIS_0.4.1.md` (en el repo). `scripts\build.ps1` OK (189 tests):
+  `dist/TINT_SIS/TINT_SIS.exe` e instalador `dist/installer/TINT_SIS_Setup_0.4.1.exe`
+  (01/10 16:43). El exe **no se lanzó** (solo se compiló). Falta armar el paquete
   `dist/TINT_SIS_0.4.1_instalacion` con la tabla ya renombrada en `TINT_SIS\input`
   (el de 0.4.0 trae `productos_TINT.xlsx`). Las guías `GUIA_USO.md`, el manual 0.4.0 y
-  demás .md de la raíz aparecían borrados del working tree el 01/10 (siguen en git).
+  demás .md de la raíz aparecían borrados del working tree el 01/10 (siguen en git;
+  no se incluyeron en el commit).
 - **En curso:** el usuario prueba las importaciones de cada archivo filtrado en su
   software; los ajustes que salgan se corrigen sobre la marcha.
 - Revisar `homologos_TINT.xlsx`: ~20 filas con nota en `Revisar` (nombres
