@@ -306,14 +306,18 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # .exe + instalador
 - **Versión 0.3.1** (30/09/2026): duplicadas por Clasificación+Producto+Cartilla+
   Color+Base y sin el aviso de "carpeta de entrega" en Inicio.
   `dist/installer/TINT_SIS_Setup_0.3.1.exe` es anterior a "E3 sin cartilla".
-- **Versión 0.4.0** (01/10/2026, `__version__` ya en 0.4.0, **sin commitear y sin
-  instalador**): advertencias guardadas y listadas (en naranjo), avisos al
-  terminar (cartel + notificación de Windows) y aviso aparte de experto
-  faltante, E1 también por galón. Manual de usuario
-  nuevo: `MANUAL_USUARIO_TINT_SIS_0.4.0.md` (el de 0.2.0 sigue sin versionar al
-  lado). UI probada con Playwright en instancia aislada (flujo completo maestro →
-  preparar → ciclo con advertencias, claro y oscuro). Falta: build del
-  instalador y probar el exe (notificación + parpadeo en la ventana real).
+- **Versión 0.4.0** (01/10/2026, commit 4d3d583 en `main`, pusheado):
+  advertencias guardadas y listadas (en naranjo), avisos al terminar (cartel +
+  notificación de Windows) y aviso aparte de experto faltante, E1 también por
+  galón. Manual de usuario `MANUAL_USUARIO_TINT_SIS_0.4.0.md` (en el repo; el de
+  0.2.0 sigue sin versionar al lado). UI probada con Playwright en instancia
+  aislada. `dist/installer/TINT_SIS_Setup_0.4.0.exe` y paquete
+  `dist/TINT_SIS_0.4.0_instalacion(.zip)` = instalador + LEEME + manual +
+  `TINT_SIS\input\productos_TINT.xlsx` (la del 30/09 12:37). Exe probado aislado
+  (LOCALAPPDATA temporal + config propio): ventana "TINT_SIS 0.4.0", ciclo con
+  Experto 2 faltante → avisos "Ciclo terminado" y "Falta un experto" en naranjo
+  y 2 notificaciones de Windows fijas (ícono desde `_internal\assets`). El
+  parpadeo de la barra de tareas no se verificó a ojo.
 - **En curso:** el usuario prueba las importaciones de cada archivo filtrado en su
   software; los ajustes que salgan se corrigen sobre la marcha.
 - Revisar `productos_TINT.xlsx`: ~20 filas con nota en `Revisar` (nombres
