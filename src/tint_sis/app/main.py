@@ -17,6 +17,7 @@ from tint_sis import __version__
 from tint_sis.config import load_config
 from tint_sis.paths import app_data_dir, is_frozen
 
+from . import _avisos
 from .server import app
 
 WINDOW_TITLE = f"TINT_SIS {__version__}"
@@ -105,6 +106,9 @@ def main() -> None:
         return
 
     url = f"http://127.0.0.1:{port}/"
+    # notificacion de Windows al terminar la preparacion o un ciclo (y, en la
+    # ventana de escritorio, parpadeo de su boton en la barra de tareas)
+    _avisos.activar_sistema(None if args.browser else WINDOW_TITLE)
 
     if args.browser:
         import webbrowser

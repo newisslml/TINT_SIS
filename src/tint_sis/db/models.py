@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -32,3 +32,15 @@ class GeneratedFileRecord(Base):
     generado_en: Mapped[datetime.datetime] = mapped_column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
 
     batch: Mapped[Batch] = relationship(back_populates="generated_files")
+
+
+class BatchAdvertencias(Base):
+    """Advertencias de un ciclo (una fila por ciclo). Es una tabla aparte para
+    que create_all la agregue a las bases que ya existen; un ciclo sin fila es
+    anterior a que se guardaran (no se sabe cuantas tuvo)."""
+
+    __tablename__ = "batch_advertencias"
+
+    batch_id: Mapped[int] = mapped_column(ForeignKey("batches.id"), primary_key=True)
+    # JSON: [{"texto": "...", "detalle": ["...", ...]}, ...]
+    datos: Mapped[str] = mapped_column(Text)

@@ -64,6 +64,9 @@ class AppConfig:
     homologos_master_name: str = _DEFAULT_HOMOLOGOS_NAME
     # carpeta de entrega por software o por grupo/tienda: {"MP14": r"D:\\entrega\\mp14"}
     delivery_paths: dict[str, str] = field(default_factory=dict)
+    # notificacion de Windows al terminar la preparacion de los expertos o un ciclo
+    # (el cartel dentro de la app sale siempre)
+    notificaciones: bool = True
 
     def software_defs(self) -> list[SoftwareDef]:
         return [SoftwareDef.from_dict(s) for s in self.softwares]
@@ -90,6 +93,7 @@ class AppConfig:
             "filtrados_dirname": self.filtrados_dirname,
             "homologos_master_name": self.homologos_master_name,
             "delivery_paths": dict(self.delivery_paths),
+            "notificaciones": self.notificaciones,
         }
 
     @classmethod
@@ -111,6 +115,7 @@ class AppConfig:
             filtrados_dirname=data.get("filtrados_dirname", base.filtrados_dirname),
             homologos_master_name=data.get("homologos_master_name", base.homologos_master_name),
             delivery_paths=dict(data.get("delivery_paths", base.delivery_paths)),
+            notificaciones=bool(data.get("notificaciones", base.notificaciones)),
         )
 
 

@@ -25,6 +25,8 @@ from tint_sis.preparar import (
     preparar_expertos,
 )
 
+from . import _avisos
+
 
 @dataclass
 class PrepState:
@@ -80,6 +82,29 @@ def _on_progress(evento: dict) -> None:
                 _state.log.append(etapa)
 
 
+def _expertos_sin_generar(analisis: Analisis, cfg: AppConfig) -> list[str]:
+    """"Experto 2 (Tinwise_Lab)" por cada experto que la preparacion no genera
+    (no hay un experto anterior que sirva de plantilla)."""
+    out = []
+    for plan in analisis.expertos:
+        if plan.estado == "ok":
+            continue
+        softwares = [s.nombre for s in cfg.software_defs() if s.experto == plan.label]
+        out.append(f"{plan.label} ({', '.join(softwares)})" if softwares else plan.label)
+    return out
+
+
+def _avisar_expertos_sin_generar(faltan: list[str], cfg: AppConfig) -> None:
+    _avisos.avisar(
+        "Falta un experto" if len(faltan) == 1 else f"Faltan {len(faltan)} expertos",
+        f"No se genera {', '.join(faltan)}: no hay un experto anterior en la carpeta de entrada que sirva de "
+        "plantilla. Sus softwares van a quedar afuera del ciclo.",
+        nivel="advertencia",
+        vista="nuevo-ciclo",
+        sistema=cfg.notificaciones,
+    )
+
+
 def _iniciar(estado: str, mensaje: str) -> bool:
     with _lock:
         if _state.estado in ("analizando", "preparando"):
@@ -113,13 +138,18 @@ def iniciar_analisis(cfg: AppConfig, maestro: Path) -> bool:
         _state.resultado = None
 
     def correr() -> None:
+        nombre = Path(maestro).name
         try:
             analisis = analizar_maestro(Path(maestro), cfg, on_progress=_on_progress)
         except (FormatoExpertoError, PreparacionError, OSError) as exc:
             _fallar(exc, esperado=True)
+            _avisos.avisar("No se pudo analizar el maestro", f"{nombre}: {exc}", nivel="error",
+                           vista="nuevo-ciclo", sistema=cfg.notificaciones)
             return
         except Exception as exc:  # noqa: BLE001 - se muestra el error crudo en la UI
             _fallar(exc, esperado=False)
+            _avisos.avisar("No se pudo analizar el maestro", f"{nombre}: ver el detalle en Nuevo ciclo.",
+                           nivel="error", vista="nuevo-ciclo", sistema=cfg.notificaciones)
             return
         with _lock:
             _state.estado = "analizado"
@@ -130,6 +160,22 @@ def iniciar_analisis(cfg: AppConfig, maestro: Path) -> bool:
                 f"Análisis listo: {len(analisis.nuevos)} producto(s) nuevo(s), "
                 f"{len(analisis.cambios)} con cambios, {len(analisis.quitados)} que ya no vienen"
             )
+        # el usuario tiene que revisar y decidir antes de preparar
+        siguiente = (
+            "Revisá el resumen y prepará los expertos."
+            if analisis.puede_preparar
+            else "Hay algo que impide preparar: revisalo en Nuevo ciclo."
+        )
+        faltan = _expertos_sin_generar(analisis, cfg)
+        _avisos.avisar(
+            "Análisis del maestro listo",
+            f"{nombre}: {len(analisis.nuevos)} producto(s) nuevo(s). {siguiente}",
+            nivel="error" if not analisis.puede_preparar else ("advertencia" if faltan else "ok"),
+            vista="nuevo-ciclo",
+            sistema=cfg.notificaciones,
+        )
+        if faltan:
+            _avisar_expertos_sin_generar(faltan, cfg)
 
     threading.Thread(target=correr, daemon=True).start()
     return True
@@ -159,9 +205,13 @@ def iniciar_preparacion(cfg: AppConfig, decisiones: dict[str, DecisionNuevo]) ->
                 # el analisis sigue valido: se puede corregir (cerrar el archivo) y reintentar
                 _state.estado = "analizado"
                 _state.finished_at = time.time()
+            _avisos.avisar("No se pudieron preparar los expertos", str(exc), nivel="error",
+                           vista="nuevo-ciclo", sistema=cfg.notificaciones)
             return
         except Exception as exc:  # noqa: BLE001
             _fallar(exc, esperado=False)
+            _avisos.avisar("No se pudieron preparar los expertos", "Ver el detalle del error en Nuevo ciclo.",
+                           nivel="error", vista="nuevo-ciclo", sistema=cfg.notificaciones)
             return
         with _lock:
             _state.estado = "listo"
@@ -169,6 +219,17 @@ def iniciar_preparacion(cfg: AppConfig, decisiones: dict[str, DecisionNuevo]) ->
             _state.progreso = 100
             _state.resultado = resultado.to_dict()
             _state.log.append(f"Expertos preparados: {', '.join(a.archivo for a in resultado.archivos)}")
+        faltan = _expertos_sin_generar(analisis, cfg)
+        _avisos.avisar(
+            "Expertos preparados",
+            f"{', '.join(a.archivo for a in resultado.archivos)} listos en la carpeta de entrada. "
+            "Ya se puede ejecutar el ciclo.",
+            nivel="advertencia" if faltan else "ok",
+            vista="nuevo-ciclo",
+            sistema=cfg.notificaciones,
+        )
+        if faltan:
+            _avisar_expertos_sin_generar(faltan, cfg)
 
     threading.Thread(target=correr, daemon=True).start()
     return None

@@ -25,8 +25,14 @@
   --error-bg: #fbe7e5;
   --info: var(--azul);
   --info-bg: var(--accent-soft);
-  --advertencia: var(--on-ambar);
-  --advertencia-bg: var(--ambar-soft);
+  /* advertencias en naranjo fuerte, para que llamen la atención (pedido del
+     usuario 2026-10-01): texto oscuro sobre fondo naranjo claro, borde y
+     relleno naranjo; el rojo queda para lo que impide seguir */
+  --naranjo: #ea580c;
+  --advertencia: #9a3412;
+  --advertencia-bg: #ffedd5;
+  --advertencia-fill: #c2410c;
+  --on-advertencia-fill: #ffffff;
   --no-habilitado: var(--gris);
   /* relleno verde con texto blanco (Ejecutar, Guardar, chips y switch activos):
      el mismo en los dos temas para que el blanco siempre se lea */
@@ -84,6 +90,11 @@
     --error: #f07b6e;
     --error-bg: color-mix(in srgb, #f07b6e 14%, #0b2531);
     --info: #4f9eeb;
+    --naranjo: #fb923c;
+    --advertencia: #fb923c;
+    --advertencia-bg: color-mix(in srgb, #fb923c 16%, #0b2531);
+    --advertencia-fill: #fb923c;
+    --on-advertencia-fill: #051720;
     --no-habilitado: #9a9a9a;
 
     --experto-1: #4f9eeb;

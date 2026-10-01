@@ -1,25 +1,23 @@
 import { api } from "../api.js";
-import { h, card, numcard, btn, tabla } from "../dom.js";
+import { h, numcard, tabla } from "../dom.js";
+import { listaAdvertencias } from "../advertencias.js";
 
 const linklike = (label, onClick) => h("button", { class: "linklike", onclick: onClick }, label);
 const abrir = (ruta, modo) => api.reveal(ruta, modo).catch((e) => alert("No se pudo abrir: " + e.message));
 
-export async function render(view, { navigate }) {
+export async function render(view) {
   const data = await api.resultados();
   const r = data.resumen;
 
   view.append(h("h1", { class: "view__title" }, "Resultados"));
-  view.append(h("p", { class: "muted" }, "Revisá y entregá lo generado."));
+  view.append(h("p", { class: "muted" }, data.fecha ? `Ciclo del ${data.fecha}. Revisá y entregá lo generado.` : "Revisá y entregá lo generado."));
 
-  view.append(
-    h(
-      "div",
-      { class: "row" },
-      numcard(r.archivos, "archivos generados"),
-      numcard(r.filas_totales, "filas totales"),
-      numcard(r.advertencias, "advertencias")
-    )
-  );
+  const tituloAvisos = h("h2", { class: "section__title" }, `Advertencias (${r.advertencias})`);
+  const nAvisos = numcard(r.advertencias, "advertencias (ver abajo)");
+  nAvisos.classList.add("numcard--link");
+  if (r.advertencias > 0) nAvisos.classList.add("numcard--advertencia");
+  nAvisos.addEventListener("click", () => tituloAvisos.scrollIntoView({ behavior: "smooth", block: "start" }));
+  view.append(h("div", { class: "row" }, numcard(r.archivos, "archivos generados"), numcard(r.filas_totales, "filas totales"), nAvisos));
 
   for (const g of data.grupos) {
     view.append(h("h2", { class: "section__title" }, g.titulo));
@@ -48,11 +46,8 @@ export async function render(view, { navigate }) {
     );
   }
 
-  view.append(
-    h(
-      "button",
-      { class: "linklike", onclick: () => navigate("advertencias") },
-      `Ver advertencias y validación (${r.advertencias})`
-    )
-  );
+  // qué quedó afuera del ciclo y por qué (productos que no están en la tabla,
+  // expertos que faltan, tiendas sin productos…)
+  view.append(tituloAvisos);
+  view.append(listaAdvertencias(r.advertencias === "-" ? null : data.advertencias));
 }

@@ -85,6 +85,13 @@ def test_expertos_habilitados_default_todos_y_roundtrip(tmp_path):
     assert [s.nombre for s in cfg.softwares_activos()] == ["Santint", "Corob_Tint"]
 
 
+def test_notificaciones_default_encendidas_y_roundtrip(tmp_path):
+    assert AppConfig().notificaciones is True
+    path = tmp_path / "config.json"
+    save_config(AppConfig(notificaciones=False), path)
+    assert load_config(path).notificaciones is False
+
+
 def test_expertos_habilitados_ignora_labels_desconocidos(tmp_path):
     path = tmp_path / "config.json"
     path.write_text('{"expertos_habilitados": ["Experto 2", "Experto 9"]}', encoding="utf-8")

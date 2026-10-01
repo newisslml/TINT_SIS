@@ -109,7 +109,9 @@ def test_analisis_compara_con_el_ciclo_anterior_y_la_tabla(entorno):
     assert planes["Experto 2"].entran == ["Ltx. CP-70 Soquina construccion", "Texturex y Homologos"]
     assert planes["Experto 3"].entran == ["Ltx. CP-70 Soquina construccion", "Texturex y Homologos"]
     assert planes["Experto 3"].salen == ["Esm. al agua / Otro"]
-    assert any("se dividen por 4" in w for w in a.advertencias)
+    # Texturex viene en Tineta 4 gl: 2 formulas (sin la repetida) pasan a galon en los 3
+    assert a.filas_a_galon == 2
+    assert any("'Tineta 4 gl'" in w and "divididas por 4" in w and "los 3 expertos" in w for w in a.advertencias)
     assert any("Texturex y Homologos: 1 formulas duplicadas" in w and "mismos colorantes" in w for w in a.advertencias)
     # la tabla no tiene nombre de Experto 2 para CP-70: se completa al preparar
     assert a._completar == {3: {"Experto 2": "Ltx. CP-70 Soquina construccion"}}
@@ -144,6 +146,11 @@ def test_preparar_genera_los_tres_expertos_y_actualiza_la_tabla(entorno):
     assert len(e1) == 8 and e1[0][1] == "Producto "
     assert [f[6] for f in e1[1:]] == ["amarillo", "blanco", "gris", "rojo", "Alamo ", "Arcilla", "amarillo"]
     assert e1[7][2] == "Texturex"
+    # ... con Texturex (Tineta 4 gl) pasado a galon; lo que ya venia en galon, igual
+    assert e1[5][3] == "Galon" and e1[5][11:14] == [68.625, "OC-15.7", "VE-11.1"]
+    assert e1[6][3] == "Galon" and e1[6][11:13] == [68.625, "NE-8"]
+    assert e1[2][3] == "Galon (3.785 Lts.)" and e1[1][11:14] == [116, "AO-26.5", "AV-430"]
+    assert any("Experto 1: 2 formulas pasadas a galón" in w for w in r.advertencias)
 
     # Experto 3: grafia de la plantilla, todo en galon (Texturex / 4)
     e3 = _filas(inp / "Experto_3_28_09_2026.xlsx", "Formulas")
@@ -217,17 +224,37 @@ def test_formato_desconocido_y_colorante_ilegible_bloquean(entorno):
     malo = experto_openpyxl(
         cfg.input_dir.parent / "maestros" / "Todo MP14 30092026.xlsx",
         HEADER_MAESTRO,
-        [["Latex ", "Ltx. Habitacional Ceresita", "Millennium", "Balde 5 gl", None, None, "amarillo",
+        [["Latex ", "Ltx. Habitacional Ceresita", "Millennium", "Balde", None, None, "amarillo",
           None, None, None, "Fuerte", 116, "AO26.5", None]],
         hoja="Hoja1",
         extra=False,
     )
     a = analizar_maestro(malo, cfg)
     assert not a.puede_preparar
-    assert any("Balde 5 gl" in b for b in a.bloqueantes)
+    assert any("'Balde'" in b for b in a.bloqueantes)
     assert any("AO26.5" in b for b in a.bloqueantes)
     with pytest.raises(PreparacionError):
         preparar_expertos(a, cfg)
+
+
+def test_formato_con_galones_en_el_nombre_se_convierte_y_avisa(entorno):
+    cfg, _ = entorno
+    balde = experto_openpyxl(
+        cfg.input_dir.parent / "maestros" / "Todo MP14 30092026.xlsx",
+        HEADER_MAESTRO,
+        [["Latex ", "Ltx. Habitacional Ceresita", "Millennium", "Balde 5 gl", None, None, "amarillo",
+          239, 207, 30, "Fuerte", 580, "AO-132.5", "AV-2150"]],
+        hoja="Hoja1",
+        extra=False,
+    )
+    a = analizar_maestro(balde, cfg)
+    assert a.puede_preparar and a.filas_a_galon == 1
+    assert any("'Balde 5 gl'" in w and "sale del nombre del formato" in w for w in a.advertencias)
+    preparar_expertos(a, cfg, ahora=AHORA)
+    e1 = _filas(cfg.input_dir / "Experto_1_30_09_2026.xlsx")
+    assert e1[1][3] == "Galon" and e1[1][11:14] == [116, "AO-26.5", "AV-430"]
+    e3 = _filas(cfg.input_dir / "Experto_3_30_09_2026.xlsx", "Formulas")
+    assert e3[1][15:19] == ["AO", 26.5, "AV", 430]
 
 
 def test_sin_plantilla_de_experto_2_no_lo_genera(entorno):

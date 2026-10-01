@@ -12,6 +12,13 @@ export async function render(view, { navigate }) {
     view.append(h("div", { class: `banner banner--${a.nivel}` }, a.texto));
   }
 
+  // con advertencias, el indicador va en naranjo y lleva a la lista en Resultados
+  const nAvisos = numcard(lc.advertencias, lc.advertencias > 0 ? "advertencias (ver en Resultados)" : "advertencias");
+  if (lc.advertencias > 0) {
+    nAvisos.classList.add("numcard--advertencia", "numcard--link");
+    nAvisos.addEventListener("click", () => navigate("resultados"));
+  }
+
   view.append(
     card(
       h("h2", { class: "section__title" }, "Último ciclo"),
@@ -21,12 +28,7 @@ export async function render(view, { navigate }) {
         h("div", { class: "stack" }, h("span", { class: "muted" }, "Fecha"), h("span", { class: "mono" }, lc.fecha)),
         h("div", { class: "stack" }, h("span", { class: "muted" }, "Experto usado"), h("span", { class: "mono" }, lc.experto))
       ),
-      h(
-        "div",
-        { class: "row" },
-        numcard(lc.archivos_generados, "archivos generados (_ready)"),
-        numcard(lc.advertencias, "advertencias")
-      )
+      h("div", { class: "row" }, numcard(lc.archivos_generados, "archivos generados (_ready)"), nAvisos)
     )
   );
 

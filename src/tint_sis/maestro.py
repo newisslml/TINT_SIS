@@ -11,7 +11,8 @@ CLAVE_FORMULA_E3 (sin Cartilla): de un mismo color en varias cartillas queda la
 primera fila. Reglas verificadas fila a fila contra los expertos del
 24/09/2026 (174.127 formulas iguales en los 3):
 
-  Experto 1  el maestro tal cual (copia del archivo, sin las duplicadas).
+  Experto 1  el maestro tal cual (copia del archivo, sin las duplicadas), salvo
+             las formulas que no vienen en galon (`a_galon`).
   Experto 3  Santint/Corob: group_code / product_code de la tabla de productos,
              color_key1 = Color, comment = Tolerancia luz, base_code = Base con la
              grafia de las bases que ya conoce ("BASE N" -> "Base N", "fuerte" ->
@@ -24,17 +25,21 @@ primera fila. Reglas verificadas fila a fila contra los expertos del
              original), QtyN en cm3 (1/48 oz x 29,574 / 48), R/G/B,
              Note1 = Tolerancia luz y Note2 = Primer.
 
-Las cantidades de E2/E3 van por galon: una formula en "Tineta 4 gl" trae las
-cantidades para 4 galones (en Texturex son exactamente 4 veces las de sus
-homologos en galon; 53.706 pares verificados), asi que se divide por
-FORMATOS_GALONES. Un formato que no este ahi bloquea la preparacion (no se
-adivina).
+Los 3 expertos van siempre por galon (pedido del usuario: E2/E3 el 28/09/2026,
+tambien E1 el 01/10/2026): una formula en "Tineta 4 gl" trae las cantidades
+para 4 galones (en Texturex son exactamente 4 veces las de sus homologos en
+galon; 53.706 pares verificados), asi que se divide por los galones del envase.
+En E1 la fila queda con Formato "Galon" y Oz base y colorantes divididos. Los
+galones de cada formato salen de FORMATOS_GALONES o, si no esta ahi, de la
+cantidad que dice su nombre ("Balde 5 gl", "1/4 galon", "1 litro"; se avisa).
+Un formato sin equivalencia en ninguno de los dos bloquea la preparacion.
 """
 from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
 from tint_sis.adapters.sheet_filter import FormatoExpertoError, iterar_filas
@@ -54,6 +59,12 @@ FORMATOS_GALONES: dict[str, float] = {
     normalizar("Galon (3.785 Lts.)"): 1,
     normalizar("Tineta 4 gl"): 4,
 }
+LITROS_POR_GALON = 3.785
+# cantidad y unidad en el nombre normalizado de un formato que no esta en
+# FORMATOS_GALONES: "balde5gl", "1/4galon", "litro" (sin numero = 1)
+_FORMATO_CANTIDAD_RE = re.compile(
+    r"(?:(\d+(?:[.,]\d+)?)(?:/(\d+))?)?(galones|galon|gal|gl|litros|litro|lts|lt)(?![a-z])"
+)
 
 # campo -> encabezado normalizado en el maestro
 COLUMNAS = {
@@ -68,6 +79,7 @@ COLUMNAS = {
     "g": "g",
     "b": "b",
     "base": "base",
+    "oz_base": "ozbase",
 }
 # una formula = un color de un producto: dos filas con la misma clave son la misma
 # formula aunque cambien RGB, notas, formato o colorantes (se deja la primera)
@@ -77,6 +89,8 @@ CLAVE_FORMULA_E3 = ("clasificacion", "producto", "color", "base")
 OBLIGATORIAS = ("clasificacion", "producto", "cartilla", "formato", "color", "base")
 _COLORANTE_ENC_RE = re.compile(r"^col\.?(\d+)-1/48onzas$")
 _COLORANTE_RE = re.compile(r"^([A-Za-z]{1,4})\s*-\s*(\d+(?:[.,]\d+)?)$")
+# la celda tal como viene, para cambiar solo la cantidad: " oc - 3,5 " -> (" oc - ", "3,5", " ")
+_COLORANTE_PARTES_RE = re.compile(r"^(\s*[A-Za-z]{1,4}\s*-\s*)(\d+(?:[.,]\d+)?)(\s*)$")
 # celdas de colorante vacias: "", "-", "-0", "0"
 _VACIO_RE = re.compile(r"^-?\s*0*(?:[.,]0*)?$")
 
@@ -99,8 +113,68 @@ def parse_colorante(celda: object) -> tuple[str, float] | None:
     return m.group(1).upper(), float(m.group(2).replace(",", "."))
 
 
+def equivalencia(formato: object) -> tuple[float | None, bool]:
+    """(galones que contiene el envase, si salio del nombre del formato y no de
+    FORMATOS_GALONES). (None, False) si no se sabe."""
+    clave = normalizar(formato)
+    if clave in FORMATOS_GALONES:
+        return FORMATOS_GALONES[clave], False
+    m = _FORMATO_CANTIDAD_RE.search(clave)
+    # sin numero solo vale la unidad sola ("Litro"): "Cuarto de galon" no es 1 galon
+    if m is None or (not m.group(1) and m.group(0) != clave):
+        return None, False
+    numero, divisor, unidad = m.groups()
+    cantidad = float(numero.replace(",", ".")) if numero else 1.0
+    if divisor:
+        cantidad /= int(divisor) or 1
+    if unidad.startswith("l"):
+        cantidad /= LITROS_POR_GALON
+    return (cantidad if cantidad > 0 else None), cantidad > 0
+
+
 def galones(formato: object) -> float | None:
-    return FORMATOS_GALONES.get(normalizar(formato))
+    return equivalencia(formato)[0]
+
+
+def _dividir(cantidad: str, galones_envase: float) -> Decimal | None:
+    """cantidad (texto con . o ,) / galones, en decimal exacto (26.5 / 4 = 6.625)
+    con a lo sumo 6 decimales. None si no es un numero."""
+    try:
+        q = Decimal(cantidad.strip().replace(",", ".")) / Decimal(str(galones_envase))
+    except (InvalidOperation, ZeroDivisionError):
+        return None
+    if q.as_tuple().exponent < -6:
+        q = q.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+    return q.normalize()
+
+
+def _decimal_texto(q: Decimal) -> str:
+    return format(q, "f")
+
+
+def a_galon(cols: "Columnas", fila: list) -> dict[int, str | int | float]:
+    """Celdas a cambiar para dejar por galon una formula del maestro en Experto
+    1 (posicion de columna -> valor nuevo): Formato "Galon" y Oz base y la
+    cantidad de cada colorante divididos por los galones del envase ("OC-62.8"
+    en Tineta 4 gl -> "OC-15.7"; el codigo y la grafia de la celda se
+    conservan). {} si ya esta en galon o el formato no tiene equivalencia."""
+    galones_envase = galones(cols.valor(fila, "formato"))
+    if galones_envase is None or galones_envase == 1:
+        return {}
+    cambios: dict[int, str | int | float] = {cols.pos["formato"]: CAN_GALON}
+    oz = cols.valor(fila, "oz_base")
+    if oz is not None and str(oz).strip():
+        q = _dividir(str(oz), galones_envase)
+        if q is not None:
+            cambios[cols.pos["oz_base"]] = int(q) if q == q.to_integral_value() else float(q)
+    for i in cols.colorantes:
+        celda = fila[i] if i < len(fila) else None
+        if parse_colorante(celda) is None:  # vacia ("-0"): queda igual
+            continue
+        prefijo, cantidad, cola = _COLORANTE_PARTES_RE.match(str(celda)).groups()
+        texto = _decimal_texto(_dividir(cantidad, galones_envase))
+        cambios[i] = prefijo + (texto.replace(".", ",") if "," in cantidad else texto) + cola
+    return cambios
 
 
 @dataclass(frozen=True)

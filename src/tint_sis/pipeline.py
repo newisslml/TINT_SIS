@@ -24,13 +24,34 @@ from tint_sis.routing import fecha_experto, find_latest_expert, matching_files
 ProgressCallback = Callable[[dict], None]
 
 STAGING_DIRNAME = ".staging"
-# Cuantos productos sin asignar se nombran en la advertencia (el resto se cuenta).
-_MAX_SIN_ASIGNAR = 12
 
 
 def _emit(cb: ProgressCallback | None, **event: object) -> None:
     if cb is not None:
         cb(event)
+
+
+def _miles(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
+# Advertencia.tipo de un experto que no se pudo usar (falta, viene en .xls, no se
+# pudo leer, la tabla no tiene su columna): sus softwares no se generaron y la
+# app lo notifica aparte al terminar el ciclo
+TIPO_EXPERTO = "experto"
+
+
+@dataclass
+class Advertencia:
+    """Algo que quedo afuera del ciclo o hay que revisar. `detalle`: la lista
+    completa de lo que se nombra (p. ej. cada producto sin asignar con sus filas)."""
+
+    texto: str
+    detalle: list[str] = field(default_factory=list)
+    tipo: str = ""
+
+    def to_dict(self) -> dict:
+        return {"texto": self.texto, "detalle": list(self.detalle), "tipo": self.tipo}
 
 
 @dataclass
@@ -46,8 +67,20 @@ class GeneratedFile:
 
 @dataclass
 class PipelineSummary:
-    ingestion_warnings: list[str] = field(default_factory=list)
+    advertencias: list[Advertencia] = field(default_factory=list)
     archivos: list[GeneratedFile] = field(default_factory=list)
+
+    @property
+    def ingestion_warnings(self) -> list[str]:
+        return [a.texto for a in self.advertencias]
+
+    @property
+    def expertos_omitidos(self) -> list[Advertencia]:
+        """Advertencias de expertos que no se pudieron usar en el ciclo."""
+        return [a for a in self.advertencias if a.tipo == TIPO_EXPERTO]
+
+    def avisar(self, texto: str, detalle: Iterable[str] = (), tipo: str = "") -> None:
+        self.advertencias.append(Advertencia(texto, list(detalle), tipo))
 
 
 @dataclass(frozen=True)
@@ -68,10 +101,11 @@ def planificar(
     expertos_globs: Mapping[str, str],
     habilitadas: set[str],
     expertos_habilitados: set[str] | None = None,
-) -> tuple[list[_Trabajo], list[str]]:
+) -> tuple[list[_Trabajo], list[Advertencia]]:
     """Que experto se filtra para que softwares/tiendas, y advertencias por
-    expertos faltantes (sus softwares se omiten, el resto se genera igual). Los
-    expertos desactivados (`expertos_habilitados`) se saltean sin aviso."""
+    expertos faltantes (TIPO_EXPERTO: sus softwares se omiten, el resto se
+    genera igual). Los expertos desactivados (`expertos_habilitados`) se
+    saltean sin aviso."""
     por_experto: dict[str, list[SoftwareDef]] = {}
     for sw in softwares:
         if expertos_habilitados is not None and sw.experto not in expertos_habilitados:
@@ -80,7 +114,7 @@ def planificar(
             por_experto.setdefault(sw.experto, []).append(sw)
 
     trabajos: list[_Trabajo] = []
-    avisos: list[str] = []
+    avisos: list[Advertencia] = []
     for experto in EXPERTOS:
         sws = por_experto.get(experto)
         if not sws:
@@ -92,12 +126,13 @@ def planificar(
             prefijo = glob.split("*", 1)[0]
             viejos = [p.name for p in matching_files(input_dir, f"{prefijo}*.xls")]
             if viejos:
-                avisos.append(
+                texto = (
                     f"{experto}: {viejos[0]} esta en formato .xls (tope de 65.535 filas, "
                     f"queda truncado) - guardarlo como .xlsx. Se omiten {nombres}"
                 )
             else:
-                avisos.append(f"Falta {experto} ({glob}) en la carpeta de entrada: se omiten {nombres}")
+                texto = f"Falta {experto} ({glob}) en la carpeta de entrada: se omiten {nombres}"
+            avisos.append(Advertencia(texto, tipo=TIPO_EXPERTO))
             continue
         tiendas: list[str] = []
         for sw in sws:
@@ -108,14 +143,14 @@ def planificar(
     return trabajos, avisos
 
 
-def _aviso_sin_asignar(archivo: Path, sin_asignar, productos_name: str) -> str:
-    total = sum(sin_asignar.values())
+def _aviso_sin_asignar(archivo: Path, sin_asignar, productos_name: str) -> Advertencia:
+    """Productos de un experto que no estan en la tabla: el texto dice cuantos y
+    el detalle los nombra a todos, de mas a menos filas."""
     items = sin_asignar.most_common()
-    nombrados = ", ".join(f"{k} ({v})" for k, v in items[:_MAX_SIN_ASIGNAR])
-    resto = f" y {len(items) - _MAX_SIN_ASIGNAR} mas" if len(items) > _MAX_SIN_ASIGNAR else ""
-    return (
-        f"{archivo.name}: {total} filas de {len(items)} producto(s) que no estan en {productos_name} "
-        f"no se entregaron a ninguna tienda: {nombrados}{resto}"
+    return Advertencia(
+        f"{archivo.name}: {_miles(sum(sin_asignar.values()))} filas de {len(items)} producto(s) que no estan en "
+        f"{productos_name} no se entregaron a ninguna tienda (agregarlos en Homólogos)",
+        [f"{k} ({_miles(v)} filas)" for k, v in items],
     )
 
 
@@ -164,17 +199,16 @@ def run_pipeline(
     summary = PipelineSummary()
     tabla_path = input_dir / productos_name
     if not tabla_path.exists():
-        summary.ingestion_warnings.append(
-            f"Falta la tabla de productos ({productos_name}) en la carpeta de entrada: no se genero nada"
-        )
+        summary.avisar(f"Falta la tabla de productos ({productos_name}) en la carpeta de entrada: no se genero nada")
         _emit(on_progress, fase="inicio", total=0, mensaje="Filtro por productos")
         _emit(on_progress, fase="fin", mensaje="Ciclo terminado", generados=0)
         return summary
 
     tabla = leer_tabla(tabla_path)
-    summary.ingestion_warnings.extend(tabla.advertencias)
+    for aviso in tabla.advertencias:
+        summary.avisar(aviso)
     trabajos, avisos = planificar(input_dir, softwares, globs, habilitadas, expertos_habilitados)
-    summary.ingestion_warnings.extend(avisos)
+    summary.advertencias.extend(avisos)
 
     session = get_session(db_path)
     try:
@@ -199,6 +233,8 @@ def run_pipeline(
                 session, batch, summary, on_progress,
             )
 
+        # quedan con el ciclo para verlas despues en Resultados / Historial
+        repository.record_warnings(session, batch, [a.to_dict() for a in summary.advertencias])
         session.commit()
     finally:
         session.close()
@@ -225,16 +261,15 @@ def _procesar_experto(
     base = dict(item=experto, indice=indice, total=total)
     rutas = tabla.rutas.get(experto)
     if rutas is None:
-        summary.ingestion_warnings.append(
+        summary.avisar(
             f"{productos_name} no tiene la columna '{experto}': se omiten "
-            + ", ".join(s.nombre for s in trabajo.softwares)
+            + ", ".join(s.nombre for s in trabajo.softwares),
+            tipo=TIPO_EXPERTO,
         )
         return
     faltan = [t for t in trabajo.tiendas if t not in tabla.tiendas]
     if faltan:
-        summary.ingestion_warnings.append(
-            f"{productos_name} no tiene columna para {', '.join(faltan)}: esas tiendas salen vacias"
-        )
+        summary.avisar(f"{productos_name} no tiene columna para {', '.join(faltan)}: esas tiendas salen vacias")
 
     ext = archivo.suffix.lower()
     destinos = {t: staging / experto / f"{t}{ext}" for t in trabajo.tiendas}
@@ -277,20 +312,19 @@ def _procesar_experto(
             on_progress=relay("filtrar") if on_progress else None,
         )
     except (FormatoExpertoError, OSError, KeyError) as exc:
-        summary.ingestion_warnings.append(
+        summary.avisar(
             f"{archivo.name}: no se pudo filtrar ({exc}). Se omiten "
-            + ", ".join(s.nombre for s in trabajo.softwares)
+            + ", ".join(s.nombre for s in trabajo.softwares),
+            tipo=TIPO_EXPERTO,
         )
         _emit(on_progress, fase="experto_ok", mensaje=f"{experto}: error, se omite", filas=0, **base)
         return
 
     if resultado.sin_asignar:
-        summary.ingestion_warnings.append(_aviso_sin_asignar(archivo, resultado.sin_asignar, productos_name))
+        summary.advertencias.append(_aviso_sin_asignar(archivo, resultado.sin_asignar, productos_name))
     for tienda, filas in resultado.filas_por_tienda.items():
         if filas == 0 and tienda in tabla.tiendas:
-            summary.ingestion_warnings.append(
-                f"{archivo.name}: ningun producto marcado para {tienda} en {productos_name}"
-            )
+            summary.avisar(f"{archivo.name}: ningun producto marcado para {tienda} en {productos_name}")
 
     for sw in trabajo.softwares:
         carpeta = filtrados / sw.nombre

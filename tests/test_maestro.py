@@ -31,7 +31,41 @@ def test_galones_por_formato():
     assert maestro.galones("Galon") == 1
     assert maestro.galones("Galon (3.785 Lts.)") == 1
     assert maestro.galones(" tineta 4 GL ") == 4
-    assert maestro.galones("Balde 5 gl") is None
+    assert maestro.equivalencia("Tineta 4 gl") == (4, False)
+
+
+@pytest.mark.parametrize(
+    "formato, galones",
+    [
+        ("Balde 5 gl", 5),
+        ("Tineta 4 galones", 4),
+        ("1/4 Galón", 0.25),
+        ("Litro", 1 / 3.785),
+        ("Envase 3,785 Lts", 1),
+    ],
+)
+def test_galones_por_el_nombre_del_formato(formato, galones):
+    g, deducido = maestro.equivalencia(formato)
+    assert g == pytest.approx(galones) and deducido
+
+
+@pytest.mark.parametrize("formato", ["Balde", "Cuarto de galon", "Medio galón", "", None])
+def test_formato_sin_equivalencia(formato):
+    assert maestro.equivalencia(formato) == (None, False)
+
+
+def test_a_galon_divide_oz_base_y_colorantes_y_conserva_la_grafia():
+    cols = maestro.Columnas.desde_encabezado(HEADER_MAESTRO)
+    fila = _fila_maestro(c13=" ve - 44,4 ")
+    assert maestro.a_galon(cols, fila) == {3: "Galon", 11: 68.625, 12: "OC-15.7", 13: " ve - 11,1 "}
+    # vacias ("-0") y Oz base no numerico quedan igual; un entero queda entero
+    fila = _fila_maestro(c11="s/n", c12="AO-32", c13="-0")
+    assert maestro.a_galon(cols, fila) == {3: "Galon", 12: "AO-8"}
+    # 0.1 / 4 = 0.025 exacto (sin ruido de coma flotante)
+    assert maestro.a_galon(cols, _fila_maestro(c11="1", c12="AO-0.1"))[12] == "AO-0.025"
+    # ya en galon (o formato desconocido): nada que cambiar
+    assert maestro.a_galon(cols, _fila_maestro(c3="Galon (3.785 Lts.)")) == {}
+    assert maestro.a_galon(cols, _fila_maestro(c3="Balde")) == {}
 
 
 def test_columnas_por_encabezado_y_faltantes():

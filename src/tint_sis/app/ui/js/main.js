@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { h, clear } from "./dom.js";
+import { h, clear, btn } from "./dom.js";
 import * as inicio from "./views/inicio.js";
 import * as nuevoCiclo from "./views/nuevo_ciclo.js";
 import * as ejecucion from "./views/ejecucion.js";
@@ -16,19 +16,7 @@ const ROUTES = {
   historial,
   configuracion,
   homologos,
-  advertencias: soon("Advertencias", "Qué quedó afuera del ciclo y por qué. En la v1 puede vivir dentro de Resultados."),
 };
-
-function soon(title, texto) {
-  return {
-    async render(view) {
-      view.append(
-        h("h1", { class: "view__title" }, title),
-        h("p", { class: "soon-view" }, texto)
-      );
-    },
-  };
-}
 
 const DEFAULT_ROUTE = "inicio";
 const viewEl = document.getElementById("view");
@@ -83,6 +71,7 @@ async function route() {
   // la barra superior (softwares activos, último ciclo) cambia al guardar la
   // configuración o al terminar un ciclo: se refresca en cada cambio de vista
   renderStrip();
+  cerrarAvisosDe(name);
   if (typeof activeCleanup === "function") {
     try { activeCleanup(); } catch (e) {}
   }
@@ -103,6 +92,63 @@ async function route() {
 export function navigate(name) {
   location.hash = `#/${name}`;
 }
+
+// ---------- avisos de fin de trabajo ----------
+// Cuando termina el análisis del maestro, la preparación de los expertos o un
+// ciclo, el servidor deja un aviso (y, en la app instalada, una notificación de
+// Windows). Se consultan cada 2 s desde cualquier vista y cada uno queda como
+// un cartel abajo a la derecha, con un botón a su vista, hasta cerrarlo o
+// entrar a esa vista. Si sale estando ya en su vista, se va solo: no debe tapar
+// lo que hay abajo a la derecha (el botón Ejecutar de Nuevo ciclo).
+const avisosEl = h("div", { class: "avisos-flotantes", "aria-live": "polite" });
+document.body.append(avisosEl);
+const MAX_AVISOS_VISIBLES = 4;
+const SEG_AVISO_BREVE = 8;
+const BOTON_AVISO = { resultados: "Ver resultados", "nuevo-ciclo": "Ir a Nuevo ciclo", ejecucion: "Ver el detalle" };
+let ultimoAviso = null;
+
+function cerrarAvisosDe(vista) {
+  avisosEl.querySelectorAll(".aviso-flotante").forEach((el) => {
+    if (el.dataset.vista === vista) el.remove();
+  });
+}
+
+function mostrarAviso(a) {
+  const el = h("div", { class: `aviso-flotante aviso-flotante--${a.nivel}`, role: "status", "data-vista": a.vista || "" });
+  const cerrar = () => el.remove();
+  const enSuVista = !a.vista || a.vista === currentRoute();
+  const ir = enSuVista
+    ? null
+    : btn(BOTON_AVISO[a.vista] || "Ver", { variant: "primary", onClick: () => { cerrar(); navigate(a.vista); } });
+  el.append(
+    h(
+      "div",
+      { class: "aviso-flotante__cab" },
+      h("strong", {}, a.titulo),
+      h("span", { class: "aviso-flotante__hora mono" }, a.hora),
+      h("button", { class: "aviso-flotante__cerrar", title: "Cerrar", "aria-label": "Cerrar", onclick: cerrar }, "×")
+    ),
+    h("div", { class: "aviso-flotante__texto" }, a.texto),
+    ir ? h("div", { class: "row", style: "justify-content:flex-end" }, ir) : null
+  );
+  avisosEl.append(el);
+  while (avisosEl.childElementCount > MAX_AVISOS_VISIBLES) avisosEl.firstElementChild.remove();
+  if (enSuVista || a.nivel === "info") setTimeout(cerrar, SEG_AVISO_BREVE * 1000);
+  // la barra superior muestra el último ciclo: se refresca al terminar uno
+  renderStrip();
+}
+
+async function revisarAvisos() {
+  try {
+    const r = await api.avisos(ultimoAviso ?? -1);
+    if (ultimoAviso !== null) r.avisos.forEach(mostrarAviso);
+    ultimoAviso = r.ultimo;
+  } catch (e) {
+    /* servicio caído: se reintenta en el próximo tick */
+  }
+}
+revisarAvisos();
+setInterval(revisarAvisos, 2000);
 
 window.addEventListener("hashchange", route);
 if (!location.hash) location.hash = `#/${DEFAULT_ROUTE}`;

@@ -23,6 +23,9 @@ version = re.search(
 version_tuple = tuple(int(p) for p in (version.split(".") + ["0"] * 4)[:4])
 
 datas = [(str(SRC / "tint_sis" / "app" / "ui"), "tint_sis/app/ui")]
+# icono de las notificaciones de Windows (app/_avisos.py lo busca en <_MEIPASS>/assets)
+if (ROOT / "assets" / "tint_sis.ico").exists():
+    datas.append((str(ROOT / "assets" / "tint_sis.ico"), "assets"))
 binaries = []
 hiddenimports = [
     "uvicorn.logging",

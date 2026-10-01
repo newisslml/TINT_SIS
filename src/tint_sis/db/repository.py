@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tint_sis.db.models import Batch, GeneratedFileRecord
+from tint_sis.db.models import Batch, BatchAdvertencias, GeneratedFileRecord
 
 
 def get_last_batch(session: Session) -> Batch | None:
@@ -29,6 +31,31 @@ def create_batch(session: Session, origen_dir: str) -> Batch:
     session.add(batch)
     session.flush()
     return batch
+
+
+def record_warnings(session: Session, batch: Batch, advertencias: list[dict]) -> None:
+    """Guarda las advertencias del ciclo ({texto, detalle}), aunque no haya ninguna."""
+    session.merge(BatchAdvertencias(batch_id=batch.id, datos=json.dumps(advertencias, ensure_ascii=False)))
+
+
+def warnings_for_batch(session: Session, batch: Batch) -> list[dict] | None:
+    """Advertencias guardadas del ciclo, o None si es de antes de que se guardaran."""
+    fila = session.get(BatchAdvertencias, batch.id)
+    if fila is None:
+        return None
+    try:
+        datos = json.loads(fila.datos)
+    except json.JSONDecodeError:
+        return None
+    return [
+        {
+            "texto": str(a.get("texto", "")),
+            "detalle": [str(d) for d in a.get("detalle") or []],
+            "tipo": str(a.get("tipo") or ""),
+        }
+        for a in datos
+        if isinstance(a, dict)
+    ]
 
 
 def record_generated_file(session: Session, batch: Batch, linea_producto: str, adaptador: str, ruta: str) -> None:

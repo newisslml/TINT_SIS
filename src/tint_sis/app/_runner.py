@@ -23,6 +23,8 @@ from tint_sis.backups import RespaldoError
 from tint_sis.config import AppConfig
 from tint_sis.pipeline import run_pipeline
 
+from . import _avisos
+
 
 class RunCancelled(Exception):
     """El usuario pidio cancelar; se propaga desde on_progress hasta _run."""
@@ -239,6 +241,8 @@ def _run(config: AppConfig) -> None:
                 "Ciclo cancelado por el usuario. Los softwares de los expertos que ya "
                 "habían terminado quedaron escritos; el resto no se generó."
             )
+        # lo pidio el usuario: solo el cartel de la app, sin notificacion de Windows
+        _avisos.avisar("Ciclo cancelado", "El resto de los softwares no se generó.", nivel="info", sistema=False)
         return
     except RespaldoError as exc:
         # archivo del ciclo anterior abierto (p. ej. en Excel): mensaje claro, sin traceback
@@ -247,6 +251,8 @@ def _run(config: AppConfig) -> None:
             _state.finished_at = time.time()
             _state.error = str(exc)
             _state.log.append("ERROR: no se pudo respaldar el ciclo anterior (ver detalle)")
+        _avisos.avisar("El ciclo no se pudo ejecutar", str(exc), nivel="error", vista="ejecucion",
+                       sistema=config.notificaciones)
         return
     except Exception:  # noqa: BLE001 - se muestra el error crudo en la UI
         with _lock:
@@ -254,6 +260,8 @@ def _run(config: AppConfig) -> None:
             _state.finished_at = time.time()
             _state.error = traceback.format_exc()
             _state.log.append("ERROR: la corrida fallo (ver detalle)")
+        _avisos.avisar("El ciclo falló", "Ver el detalle del error en la vista de ejecución.", nivel="error",
+                       vista="ejecucion", sistema=config.notificaciones)
         return
 
     grupos: dict[str, list[dict]] = {}
@@ -274,12 +282,33 @@ def _run(config: AppConfig) -> None:
         _state.estado = "ok"
         _state.finished_at = time.time()
         _state.summary = {
+            "fecha": time.strftime("%Y-%m-%d %H:%M"),
             "resumen": {
                 "archivos": len(summary.archivos),
                 "filas_totales": f"{filas_totales:,}".replace(",", "."),
-                "advertencias": len(summary.ingestion_warnings),
+                "advertencias": len(summary.advertencias),
             },
             "grupos": [{"titulo": software, "salidas": s} for software, s in grupos.items()],
-            "advertencias": list(summary.ingestion_warnings),
+            "advertencias": [a.to_dict() for a in summary.advertencias],
         }
         _state.log.append(f"Ciclo terminado. {len(summary.archivos)} archivos generados.")
+    n = len(summary.advertencias)
+    _avisos.avisar(
+        "Ciclo terminado",
+        f"{len(summary.archivos)} archivos generados · "
+        + (f"{n} advertencia{'s' if n != 1 else ''} para revisar" if n else "sin advertencias"),
+        nivel="error" if not summary.archivos else ("advertencia" if n else "ok"),
+        vista="resultados",
+        sistema=config.notificaciones,
+    )
+    # un experto que falto (o no se pudo usar) se notifica aparte, para que no
+    # pase como una advertencia mas (pedido del usuario 2026-10-01)
+    omitidos = summary.expertos_omitidos
+    if omitidos:
+        _avisos.avisar(
+            "Falta un experto" if len(omitidos) == 1 else f"Faltan {len(omitidos)} expertos",
+            " · ".join(a.texto for a in omitidos),
+            nivel="advertencia",
+            vista="resultados",
+            sistema=config.notificaciones,
+        )

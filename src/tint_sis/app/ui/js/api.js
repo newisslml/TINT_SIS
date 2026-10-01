@@ -21,6 +21,7 @@ export const api = {
   estado: () => req("GET", "/estado"),
   inicio: () => req("GET", "/inicio"),
   preview: () => req("GET", "/preview"),
+  avisos: (desde) => req("GET", `/avisos?desde=${desde}`),
   resultados: () => req("GET", "/resultados"),
   historial: () => req("GET", "/historial"),
   reveal: (ruta, modo = "carpeta") => req("POST", "/reveal", { ruta, modo }),

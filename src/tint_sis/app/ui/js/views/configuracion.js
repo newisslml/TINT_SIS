@@ -118,6 +118,14 @@ export async function render(view) {
     )
   );
 
+  // ---------- notificaciones ----------
+  const notificaciones = interruptor(
+    "Notificaciones de Windows",
+    cfg.notificaciones !== false,
+    "Al terminar el análisis del maestro, la preparación de los expertos o un ciclo. El aviso dentro de la app sale siempre."
+  );
+  view.append(card(h("h2", { class: "section__title" }, "Avisos al terminar"), h("div", { class: "switchlist" }, notificaciones.el)));
+
   // ---------- convención de nombres ----------
   const inputStyle =
     "flex:1;font-family:var(--font-mono);font-size:13px;padding:6px 8px;border:1px solid var(--linea);border-radius:6px";
@@ -182,6 +190,7 @@ export async function render(view) {
       productos_name: productosInput.value.trim(),
       expertos: Object.fromEntries(globInputs.map((i) => [i.dataset.experto, i.value.trim()])),
       homologos_master_name: masterInput.value.trim(),
+      notificaciones: notificaciones.input.checked,
     };
     try {
       const res = await api.saveConfig(nuevo);
@@ -199,7 +208,7 @@ export async function render(view) {
     h(
       "p",
       { class: "muted", style: "font-size:13px" },
-      "v2: editar desde la app la lista de softwares (formato, tiendas, carpeta de entrega) y la tabla de productos."
+      "v2: editar desde la app la lista de softwares (formato, tiendas, carpeta de entrega)."
     )
   );
 }

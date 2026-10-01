@@ -68,10 +68,16 @@ una lista `"MP14,MP12"`; es obligatorio si hay productos nuevos.)
 
 También revisa que se pueda convertir y avisa:
 
-- **Formato de envase**: todo lo de Experto 2 y 3 va por **galón**. Una fórmula
-  en `Tineta 4 gl` trae las cantidades para 4 galones, así que en E2/E3 se
-  dividen por 4 (Experto 1 queda tal cual). Un formato que no esté en
-  `FORMATOS_GALONES` (`src/tint_sis/maestro.py`) **bloquea** la preparación.
+- **Formato de envase**: los **3 expertos** van siempre por **galón** (E2/E3
+  desde el 28/09/2026, también E1 desde el 01/10/2026). Una fórmula en
+  `Tineta 4 gl` trae las cantidades para 4 galones, así que se divide por 4: en
+  E1 la fila queda con Formato `Galon` y `Oz base` y cada colorante divididos
+  (`OC-62.8` → `OC-15.7`, en decimal exacto y conservando el código y la grafía
+  de la celda); en E2/E3 las cantidades por galón. Los galones de cada formato
+  salen de `FORMATOS_GALONES` (`src/tint_sis/maestro.py`) o, si no está ahí, de
+  la cantidad que dice el nombre (`Balde 5 gl` = 5, `1/4 galón` = 0,25,
+  `1 litro` = 1/3,785), con un aviso para revisarla. Un formato cuyo nombre no
+  dice cuánto trae (`Balde`, `Cuarto de galón`) **bloquea** la preparación.
 - **Colorantes ilegibles** (una celda que no sea `CODIGO-CANTIDAD`): bloquean.
 - **Fórmulas duplicadas**: dos filas con la misma **Clasificación, Producto,
   Cartilla, Color y Base** son la misma fórmula, aunque cambien RGB, notas,
@@ -97,7 +103,8 @@ confirmar):
    productos del maestro van a los 3 expertos). Las filas tocadas quedan con la
    nota `Preparación <fecha>` en `Revisar`.
 2. Se generan en `data/input/`, con la fecha del nombre del maestro:
-   - `Experto_1_<fecha>.xlsx`: el maestro (sin las fórmulas duplicadas).
+   - `Experto_1_<fecha>.xlsx`: el maestro (sin las fórmulas duplicadas y con
+     las que no venían en galón pasadas a galón).
    - `Experto_3_<fecha>.xlsx` (Santint/Corob): `group_code`/`product_code` de la
      tabla, `color_key1` = Color, `comment` = Tolerancia luz, `base_code` con la
      grafía que ya usa Corob (`BASE N` → `Base N`), `can_code` `Galon`,
@@ -115,6 +122,9 @@ confirmar):
 4. Queda un **resumen** (Excel y JSON) en
    `data/output/Preparacion expertos/Resumen_<fecha>.xlsx`: productos nuevos,
    cambios por producto, qué entra a cada experto y advertencias.
+
+Cuando termina el análisis y cuando termina la preparación, la app **avisa**
+(ver "Avisos al terminar" en la sección 3).
 
 Si `productos_TINT.xlsx` o un experto que hay que reemplazar está **abierto en
 Excel**, la preparación se corta sin cambiar nada: cerralo y volvé a preparar.
@@ -136,7 +146,30 @@ python -m tint_sis.cli run
 - **Tarda alrededor de 1-2 minutos** con los 3 expertos: cada experto se lee
   **una sola vez** y en esa pasada se arman los archivos de todas sus tiendas.
 - Al terminar imprime los archivos generados agrupados por software y las
-  advertencias (productos sin asignar, expertos faltantes, etc.).
+  advertencias (productos sin asignar, expertos faltantes, etc.), con la lista
+  completa de productos sin asignar debajo de cada una.
+
+**Advertencias:** cada ciclo las guarda en la base (tabla `batch_advertencias`:
+texto + detalle, p. ej. cada producto sin asignar con sus filas). En la app se
+listan en **Resultados** (último ciclo) y en **Historial** ("Ver advertencias
+(N)" en cada ciclo). Los ciclos anteriores a la 0.4.0 no las guardaban ("-").
+
+**Colores**: en toda la app las advertencias van en **naranjo** (recuadros,
+lista, indicadores, carteles) y lo que impide preparar o ejecutar en **rojo**.
+
+**Avisos al terminar** (app): cuando termina el análisis del maestro, la
+preparación de los expertos o un ciclo (o fallan), aparece un cartel abajo a la
+derecha en cualquier vista, con un botón a la vista que corresponde; se cierra
+con la × o al entrar a esa vista. Si **falta un experto** (en el ciclo: no está,
+viene en `.xls`, no se pudo leer o la tabla no tiene su columna; en la
+preparación: no hay plantilla para generarlo) llega además un aviso aparte
+**"Falta un experto"** en naranjo. Las notificaciones de Windows de advertencia o
+error llevan ⚠ y quedan en pantalla hasta cerrarlas. La app instalada además manda una
+notificación de Windows ("TINT_SIS", AppUserModelID `Codelpa.TINT_SIS`
+registrado en HKCU) y hace parpadear su botón en la barra de tareas si no es la
+ventana activa. Se apaga en Configuración → "Notificaciones de Windows"
+(`notificaciones` en `config.json`); el cartel sale siempre. La CLI y los tests
+no notifican.
 
 ## 4. Entradas: los 3 expertos + la tabla de productos
 

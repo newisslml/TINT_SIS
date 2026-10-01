@@ -111,13 +111,21 @@ corrigió a Tiendas 14.
     (decisión del usuario: Corob MP14/MP12 los recibe). Los nombres de E2/E3 que
     falten en la tabla se completan al preparar (E2 = nombre de E1; E3 =
     "<grupo de su clasificación> / <nombre E1>").
-  - **Todo a galón en E2/E3** (decisión del usuario): `Tineta 4 gl` ÷ 4
-    (`FORMATOS_GALONES`; verificado: Texturex = 4× sus homólogos en galón en
-    53.706 pares). La preparación deja E1 tal cual. Formato desconocido o colorante ilegible
-    → bloquea la preparación. El 28/09 (15:07) el usuario pidió **también E1 en
-    galón**: se convirtió el maestro antes de preparar (Tineta 4 gl → `Galon`,
-    colorantes y `Oz base` ÷ 4, con Decimal; script de sesión, no está en el repo).
-    Si vuelve a llegar en tineta, preguntar si se lleva esa conversión a `preparar.py`.
+  - **Todo a galón en los 3 expertos** (decisión del usuario: E2/E3 el 28/09; E1
+    pedido el 01/10/2026: "si llega el maestro con otro formato que no sea galón,
+    cambiar siempre a formato Galón"): `Tineta 4 gl` ÷ 4 (`FORMATOS_GALONES`;
+    verificado: Texturex = 4× sus homólogos en galón en 53.706 pares). En E1
+    `maestro.a_galon` deja Formato `Galon` y `Oz base` y colorantes ÷ galones
+    (Decimal exacto, conserva código y grafía de la celda), vía
+    `sheet_filter.copiar_formulas(cambiar=...)` (textos nuevos al final de
+    sharedStrings). Verificado 01/10: con el maestro original en tineta del 28/09
+    da E1 **idéntico fila a fila** a la conversión a mano de ese día (204.735
+    fórmulas, 4.774 convertidas). Formato que no está en `FORMATOS_GALONES` →
+    galones según su nombre (`Balde 5 gl`, `1/4 galon`, `1 litro`; sin número
+    solo vale la unidad sola: "Cuarto de galon" no es 1) con aviso "sale del
+    nombre del formato"; sin cantidad en el nombre o colorante ilegible → bloquea
+    la preparación. Un producto rotulado `Galon` con dosis de tineta (Texturas
+    28/09) no se puede detectar.
     Ojo: un archivo `Experto_28_09_2026.xlsx` en la entrada calza con el glob
     `Experto_2*` y se toma como Experto 2 (bloquea la preparación por plantilla sin
     columnas): los maestros van en `data/maestros/`, nunca con nombre `Experto_*`.
@@ -143,6 +151,40 @@ corrigió a Tiendas 14.
   - Tabla o experto a reemplazar abierto en Excel → `PreparacionError` antes de
     mover nada. Expertos viejos que no se pueden mover quedan con aviso (el ciclo
     usa el más nuevo).
+- **Advertencias guardadas y listadas** (pedido 2026-10-01, "enlista
+  advertencias"): `pipeline.Advertencia` (texto + detalle; el de productos sin
+  asignar nombra a todos con sus filas) → tabla `batch_advertencias` (una fila
+  JSON por ciclo; tabla aparte para que `create_all` la agregue a bases viejas;
+  sin fila = ciclo anterior a 0.4.0 → "-"). Resultados (último ciclo) e
+  Historial (por ciclo) las listan con `js/advertencias.js`. La vista
+  placeholder "Advertencias" se quitó.
+- **Colores** (pedido 2026-10-01: "advertencias todas en naranjo para que
+  contraste"): tokens `--naranjo`, `--advertencia*` (naranjo fuerte) para toda
+  advertencia: lista, `banner--advertencia`, `tag--advertencia`,
+  `numcard--advertencia`, carteles nivel "advertencia", tag "Falta" de un
+  experto. Lo que **impide** (bloqueantes de preview/análisis) pasó a
+  `banner--error` (rojo) para no confundirse. Azul solo para información.
+- **Experto faltante** (mismo pedido): `pipeline.TIPO_EXPERTO` marca las
+  advertencias de un experto no usado (falta, .xls, no se pudo filtrar, tabla
+  sin su columna; los desactivados no avisan). Al terminar el ciclo, además de
+  "Ciclo terminado" (naranjo si hay advertencias) sale el aviso aparte "Falta
+  un experto". En la preparación, un experto sin plantilla avisa al terminar el
+  análisis y al terminar la preparación.
+- **Avisos al terminar** (pedido 2026-10-01): `app/_avisos.py`. Análisis del
+  maestro, preparación y ciclo (ok/error; cancelado solo cartel) dejan un aviso
+  que `main.js` consulta cada 2 s (`/api/avisos?desde=`) y muestra como cartel
+  abajo a la derecha en cualquier vista. Se cierra al entrar a su vista y, si
+  sale estando en ella, solo a los 8 s: si no, tapa el botón Ejecutar (está
+  abajo a la derecha). Notificación de Windows vía PowerShell +
+  ToastNotificationManager con AUMID `Codelpa.TINT_SIS` registrado en
+  `HKCU\Software\Classes\AppUserModelId` (verificado: llega al centro de
+  notificaciones) y parpadeo del botón de la ventana (FlashWindowEx). Las de
+  advertencia/error: "⚠" en el título y `scenario="reminder"` + botón Cerrar del
+  sistema (quedan en pantalla hasta cerrarlas; verificado). No limpiar el
+  historial de notificaciones de TINT_SIS en pruebas: el usuario corre la app. Solo si
+  `main.py` llamó `activar_sistema` (la app; nunca tests ni CLI) y
+  `AppConfig.notificaciones` (switch en Configuración). El .ico va empaquetado
+  en `assets/` (tint_sis.spec).
 
 ## Mapa del código
 
@@ -150,14 +192,17 @@ corrigió a Tiendas 14.
   `ENABLED_GRUPOS`, `PRODUCTOS_NAME`, `FILTRADOS_DIRNAME`, `normalizar`.
 - `adapters/sheet_filter.py` — `filtrar_libro` (una lectura → un libro por tienda),
   `contar_claves` (catálogo de productos de un experto), `contar_valores`
-  (grafía cruda), `iterar_filas`, `quitar_filas_repetidas`.
+  (grafía cruda), `iterar_filas`, `copiar_formulas` (quita repetidas por clave y
+  cambia celdas con `cambiar`; `quitar_filas_repetidas` es el atajo sin cambios),
+  y los helpers de escritura que también usa `libro_writer` (`_sst_con_nuevos`…).
 - `adapters/libro_writer.py` — `reescribir_hoja` (plantilla + filas nuevas en la
   hoja Formulas, resto byte a byte), `encabezado`.
 - `adapters/productos.py` — `leer_tabla`, `leer_filas_tabla`, `actualizar_tabla`
   (productos nuevos + nombres faltantes) y `bootstrap_tabla` (arma la tabla desde
   homólogos + xData con ID_TINT + expertos; `cli productos-init`).
-- `maestro.py` — lectura del archivo maestro y conversión por fórmula a E2/E3
-  (`parse_colorante`, `FORMATOS_GALONES`, `Plantilla`, `fila_e2`, `fila_e3`).
+- `maestro.py` — lectura del archivo maestro y conversión por fórmula
+  (`parse_colorante`, `FORMATOS_GALONES`, `equivalencia`/`galones`, `a_galon`
+  para E1, `Plantilla`, `fila_e2`, `fila_e3`).
 - `preparar.py` — `analizar_maestro` (no escribe) / `preparar_expertos` /
   `ultimo_resumen`; resumen en `<salida>/Preparacion expertos/Resumen_<fecha>.xlsx|json`.
   App: `app/_preparar.py` (hilo + estado), rutas `/api/preparar/*`; panel
@@ -175,7 +220,10 @@ corrigió a Tiendas 14.
   por software para el resumen, bloqueantes/advertencias).
 - `config.py` — `AppConfig` en `%LOCALAPPDATA%\TINT_SIS\config.json` (hoy apunta a
   `data/` del repo); `expertos_habilitados`, `softwares`, `filtrados_dirname`…
+- `db/` — SQLite: `batches`, `generated_files`, `batch_advertencias`
+  (`repository.record_warnings` / `warnings_for_batch`).
 - `app/` — `api.py` (FastAPI), `_runner.py` (corrida en hilo + cancelación),
+  `_avisos.py` (avisos de fin de trabajo + notificación de Windows),
   `ui/` (vistas en `js/views/`, estilos en `css/app.css`, tokens en `css/tokens.css`:
   paleta Codelpa de `paleta_colores_TINT_SIS.md`, fondo claro sin degradado y modo
   oscuro automático con `prefers-color-scheme`; colores nuevos siempre como token).
@@ -199,7 +247,7 @@ corrigió a Tiendas 14.
 ## Comandos
 
 ```powershell
-.venv\Scripts\python -m pytest -q tests                  # 163 tests
+.venv\Scripts\python -m pytest -q tests                  # 187 tests
 .venv\Scripts\python -m tint_sis.cli preparar "<maestro>.xlsx" --solo-analizar   # resumen (~1 min)
 .venv\Scripts\python -m tint_sis.cli preparar "<maestro>.xlsx" --tiendas todas   # genera E1/E2/E3 (~3 min en total)
 .venv\Scripts\python -m tint_sis.cli run                 # ciclo completo (~90 s con los 3 expertos)
@@ -249,20 +297,23 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # .exe + instalador
 
 ## Estado y pendientes
 
-- Cambios en la rama `tres-expertos-por-software` (commit 78b818a, pusheada, sin
-  mergear a `main`; el usuario suele commitear directo a `main`).
+- Git: el 01/10/2026 se pusheó `tres-expertos-por-software` a `main` (fast-forward
+  hasta 7379caa = v0.3.1); se trabaja en `main` (el usuario commitea directo ahí).
 - **Versión 0.3.0** (28/09/2026, "ya en producción"): preparación desde el maestro,
   editor de Homólogos y fechas DD/MM/AA en Historial. `dist/installer/TINT_SIS_Setup_0.3.0.exe`
   y paquete `dist/TINT_SIS_0.3.0_instalacion(.zip)` = instalador + LEEME (actualizar
   desde 0.2.x / PC nuevo) + `TINT_SIS\input` con la tabla y los E1/E2/E3 del 28/09.
-  Exe probado aislado (LOCALAPPDATA temporal): ventana "TINT_SIS 0.3.0", rutas
-  /api/preparar/* y /api/productos OK. Todo sin commitear.
 - **Versión 0.3.1** (30/09/2026): duplicadas por Clasificación+Producto+Cartilla+
   Color+Base y sin el aviso de "carpeta de entrega" en Inicio.
-  `dist/installer/TINT_SIS_Setup_0.3.1.exe` y `dist/TINT_SIS_0.3.1_instalacion(.zip)`
-  = instalador + LEEME + `TINT_SIS\input\productos_TINT.xlsx` (sin expertos, a
-  pedido del usuario). Exe sin probar abierto. Sin commitear. **Ojo:** ese
-  instalador es anterior a la regla "E3 sin cartilla"; hay que regenerarlo.
+  `dist/installer/TINT_SIS_Setup_0.3.1.exe` es anterior a "E3 sin cartilla".
+- **Versión 0.4.0** (01/10/2026, `__version__` ya en 0.4.0, **sin commitear y sin
+  instalador**): advertencias guardadas y listadas (en naranjo), avisos al
+  terminar (cartel + notificación de Windows) y aviso aparte de experto
+  faltante, E1 también por galón. Manual de usuario
+  nuevo: `MANUAL_USUARIO_TINT_SIS_0.4.0.md` (el de 0.2.0 sigue sin versionar al
+  lado). UI probada con Playwright en instancia aislada (flujo completo maestro →
+  preparar → ciclo con advertencias, claro y oscuro). Falta: build del
+  instalador y probar el exe (notificación + parpadeo en la ventana real).
 - **En curso:** el usuario prueba las importaciones de cada archivo filtrado en su
   software; los ajustes que salgan se corrigen sobre la marcha.
 - Revisar `productos_TINT.xlsx`: ~20 filas con nota en `Revisar` (nombres
@@ -270,10 +321,8 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # .exe + instalador
 - "Tecnoconstrucción Mate Sipa" (E.A., 3.124 fórmulas en E1/E2/E3) está en la
   tabla sin tiendas: no va a ninguna hasta que el usuario lo marque (por eso MP14
   sale con 205.676 y no 208.800; se marca desde la vista Homólogos).
-- La vista "Advertencias" de la app es un marcador v2: los nombres de productos
-  sin asignar solo se ven completos en la CLI (en la app solo el conteo).
-  Propuesto (sin hacer): listar las advertencias en Resultados.
 - v2: editar la lista de softwares desde la app (la tabla de productos ya se edita en Homólogos).
+- Detalle conocido: `/favicon.ico` da 404 en la UI (inofensivo).
 - **Preparación desde el maestro (2026-09-28)**: el usuario ya la corrió sobre
   `data/` real (12:28) con `Todo  MP14 28092026 (sin duplicados).xlsx` (archivo de
   prueba = maestro sin las 23.875 filas repetidas, 208.800 fórmulas, junto al

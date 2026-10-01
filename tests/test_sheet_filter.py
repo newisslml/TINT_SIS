@@ -10,6 +10,7 @@ from tint_sis.adapters.sheet_filter import (
     FormatoExpertoError,
     contar_claves,
     contar_valores,
+    copiar_formulas,
     filtrar_libro,
     iterar_filas,
     quitar_filas_repetidas,
@@ -256,3 +257,47 @@ def test_quitar_filas_repetidas(tmp_path):
         # la otra hoja se copia tal cual
         with zipfile.ZipFile(src) as zs:
             assert z.read("xl/worksheets/sheet2.xml") == zs.read("xl/worksheets/sheet2.xml")
+
+
+def test_copiar_formulas_cambia_celdas(tmp_path):
+    src = experto_openpyxl(
+        tmp_path / "maestro.xlsx",
+        ["Producto", "Formato", "Oz", "Col1"],
+        [["Tex", "Tineta", 274.5, "OC-62.8"], ["Hab", "Galon", 116, "AO-26.5"], ["Tex", "Tineta", 274.5, "OC-62.8"]],
+    )
+    destino = tmp_path / "e1.xlsx"
+
+    def cambiar(fila):
+        # columnas: 0 Producto, 1 Formato, 2 Oz, 3 Col1
+        return {1: "Galon", 2: float(fila[2]) / 4, 3: "OC-15.7"} if fila[1] == "Tineta" else None
+
+    r = copiar_formulas(src, destino, clave=["Producto", "Formato"], cambiar=cambiar)
+    assert (r.leidas, r.quitadas, r.cambiadas) == (3, 1, 1)
+    assert _filas(destino) == [
+        ["Producto", "Formato", "Oz", "Col1"],
+        ["Tex", "Galon", 68.625, "OC-15.7"],
+        ["Hab", "Galon", 116, "AO-26.5"],
+    ]
+    # sin sharedStrings (como escribe openpyxl) los textos van en la celda
+    with zipfile.ZipFile(destino) as z:
+        assert re.search(rb'<c r="B2"[^>]* t="inlineStr"><is><t>Galon</t></is></c>', z.read("xl/worksheets/sheet1.xml"))
+
+
+def test_copiar_formulas_agrega_textos_a_shared_strings(tmp_path):
+    # columnas: A Producto (formula en el encabezado), B Color, C Qty; textos en sharedStrings
+    src = experto_xlsm_a_mano(tmp_path / "e2.xlsm", [["Tex", "rojo", 4], ["Hab", "verde", 8]])
+    destino = tmp_path / "e2_nuevo.xlsm"
+    r = copiar_formulas(src, destino, cambiar=lambda f: {1: "azul", 2: 1} if f[0] == "Tex" else {1: "Hab"})
+    assert r.cambiadas == 2
+    assert _filas(destino) == [["Producto", "Color", "Qty"], ["Tex", "azul", 1], ["Hab", "Hab", 8]]
+    with zipfile.ZipFile(destino) as z, zipfile.ZipFile(src) as zs:
+        sst, sst_src = z.read("xl/sharedStrings.xml"), zs.read("xl/sharedStrings.xml")
+        # "Hab" ya existia (se reutiliza su indice); "azul" se agrega al final
+        assert sst.count(b"<si>") == sst_src.count(b"<si>") + 1
+        assert sst.endswith(b"<si><t>azul</t></si></sst>")
+        assert re.search(rb'uniqueCount="(\d+)"', sst).group(1) == str(sst.count(b"<si>")).encode()
+        # "rojo" y "verde" dejan de usarse: count baja en 2 y sube en 2 (azul, Hab)
+        assert re.search(rb' count="(\d+)"', sst).group(1) == re.search(rb' count="(\d+)"', sst_src).group(1)
+        # el estilo de la celda numerica se conserva y las macros siguen
+        assert re.search(rb'<c r="C2" s="1"><v>1</v></c>', z.read("xl/worksheets/sheet1.xml"))
+        assert z.read("xl/vbaProject.bin") == VBA_BYTES

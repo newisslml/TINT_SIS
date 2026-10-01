@@ -45,3 +45,34 @@ def test_historial_distingue_backups_y_ciclos_pisados(tmp_path, monkeypatch):
     assert pisado["n_disponibles"] == 0
     assert pisado["carpeta_existe"] is False
     assert pisado["grupos"][0]["salidas"][0]["existe"] is False
+    # ciclos de antes de que se guardaran las advertencias
+    assert nuevo["advertencias"] is None
+
+
+def test_resultados_e_historial_listan_las_advertencias_guardadas(tmp_path, monkeypatch):
+    cfg = AppConfig(input_dir=tmp_path / "input", output_dir=tmp_path / "output", db_path=tmp_path / "t.db")
+    monkeypatch.setattr(api, "_cfg", lambda: cfg)
+    monkeypatch.setattr(api._runner, "last_summary", lambda: None)  # como despues de reabrir la app
+    avisos = [
+        {"texto": "Experto_1.xlsx: 9 filas de 2 producto(s) que no estan en productos_TINT.xlsx",
+         "detalle": ["Nuevo A (5 filas)", "Nuevo B (4 filas)"], "tipo": ""},
+        {"texto": "Falta Experto 2", "detalle": [], "tipo": "experto"},
+    ]
+    session = get_session(cfg.db_path)
+    try:
+        _ciclo(session, 20, [])  # ciclo viejo: sin advertencias guardadas
+        batch = Batch(origen_dir="in", creado_en=datetime.datetime(2026, 9, 24, 15, 0))
+        session.add(batch)
+        session.flush()
+        repository.record_warnings(session, batch, avisos)
+        session.commit()
+    finally:
+        session.close()
+
+    r = api.get_resultados()
+    assert r["resumen"]["advertencias"] == 2
+    assert r["advertencias"] == avisos
+    assert api.get_inicio()["ultimo_ciclo"]["advertencias"] == 2
+    nuevo, viejo = api.get_historial()["ciclos"]
+    assert nuevo["advertencias"] == avisos
+    assert viejo["advertencias"] is None

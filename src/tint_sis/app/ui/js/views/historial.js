@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { h, card, btn, tag, tabla } from "../dom.js";
+import { listaAdvertencias } from "../advertencias.js";
 
 const linklike = (label, onClick) => h("button", { class: "linklike", onclick: onClick }, label);
 
@@ -52,6 +53,24 @@ function cicloCard(c) {
   });
   toggle.classList.add("btn--naranja");
 
+  // advertencias del ciclo (null: ciclo de antes de que se guardaran)
+  const nAvisos = c.advertencias == null ? null : c.advertencias.length;
+  const avisos = h("div", { style: "margin-top:4px" }, listaAdvertencias(c.advertencias));
+  avisos.hidden = true;
+  let toggleAvisos = null;
+  if (nAvisos) {
+    const etiqueta = (abierto) => `${abierto ? "Ocultar" : "Ver"} advertencias (${nAvisos})`;
+    toggleAvisos = btn(etiqueta(false), {
+      onClick: () => {
+        avisos.hidden = !avisos.hidden;
+        toggleAvisos.textContent = etiqueta(!avisos.hidden);
+        toggleAvisos.classList.toggle("is-active", !avisos.hidden);
+      },
+    });
+    toggleAvisos.classList.add("btn--naranja");
+  }
+  const etiquetaAvisos = nAvisos ? tag("advertencia", `${nAvisos} advertencia${nAvisos === 1 ? "" : "s"}`) : null;
+
   const abrirCarpeta =
     c.carpeta && c.carpeta_existe
       ? btn("Abrir carpeta del backup", { onClick: () => abrir(c.carpeta, "carpeta") })
@@ -80,11 +99,13 @@ function cicloCard(c) {
         "div",
         { class: "row", style: "align-items:center;gap:12px" },
         estadoBackup(c.n_disponibles, c.n_archivos),
+        etiquetaAvisos,
         h("span", { class: "muted", style: "font-size:12px" }, `${c.n_archivos} archivos · ${c.filas_totales} filas`)
       )
     ),
-    h("div", { class: "row", style: "gap:12px;flex-wrap:wrap" }, abrirCarpeta, toggle),
-    detalle
+    h("div", { class: "row", style: "gap:12px;flex-wrap:wrap" }, abrirCarpeta, toggle, toggleAvisos),
+    detalle,
+    avisos
   );
 }
 

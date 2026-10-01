@@ -195,7 +195,8 @@ export function crearPreparacion({ alCambiarEstado } = {}) {
       )
     );
 
-    for (const b of a.bloqueantes || []) out.push(h("div", { class: "banner banner--advertencia" }, b));
+    // rojo: impide preparar; naranjo (al final del resumen): advertencias
+    for (const b of a.bloqueantes || []) out.push(h("div", { class: "banner banner--error" }, b));
 
     // productos nuevos
     out.push(h("h2", { class: "section__title" }, `Productos nuevos (${a.nuevos.length})`));
@@ -259,8 +260,19 @@ export function crearPreparacion({ alCambiarEstado } = {}) {
         a.expertos.map((e) => [
           h("strong", {}, e.label),
           e.archivo
-            ? h("div", {}, h("div", { class: "mono" }, e.archivo), h("div", { class: "muted", style: "font-size:12px" }, e.plantilla ? `plantilla: ${e.plantilla}` : "copia del maestro"))
-            : tag("error", "sin plantilla"),
+            ? h(
+                "div",
+                {},
+                h("div", { class: "mono" }, e.archivo),
+                h(
+                  "div",
+                  { class: "muted", style: "font-size:12px" },
+                  e.plantilla
+                    ? `plantilla: ${e.plantilla}`
+                    : "copia del maestro" + (a.filas_a_galon ? ` (${miles(a.filas_a_galon)} fórmulas pasadas a galón)` : "")
+                )
+              )
+            : tag("advertencia", "no se genera: falta su plantilla"),
           miles(e.filas),
           e.entran.length || e.salen.length
             ? h(
@@ -274,7 +286,7 @@ export function crearPreparacion({ alCambiarEstado } = {}) {
       )
     );
 
-    for (const w of a.advertencias || []) out.push(h("div", { class: "banner banner--info" }, w));
+    for (const w of a.advertencias || []) out.push(h("div", { class: "banner banner--advertencia" }, w));
     return out;
   }
 
@@ -386,7 +398,7 @@ export function crearPreparacion({ alCambiarEstado } = {}) {
         )
       )
     );
-    for (const w of r.advertencias || []) el.append(h("div", { class: "banner banner--info" }, w));
+    for (const w of r.advertencias || []) el.append(h("div", { class: "banner banner--advertencia" }, w));
     if (s.analisis) {
       // se muestra lo que quedó en la tabla (no lo sugerido)
       decisiones = {};

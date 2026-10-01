@@ -238,7 +238,7 @@ export async function render(view, { navigate }) {
                 ? tag("ok", "OK")
                 : e.estado === "desactivado"
                   ? tag("desactivado", "Desactivado")
-                  : tag("error", "Falta"),
+                  : tag("advertencia", "Falta"),
             ])
           : [[h("span", { class: "muted" }, "Ningún software habilitado."), "", ""]]
       )
@@ -267,11 +267,12 @@ export async function render(view, { navigate }) {
       )
     );
 
+    // rojo: impide ejecutar; naranjo: se ejecuta, pero algo queda afuera
     for (const b of data.bloqueantes || []) {
-      dyn.append(h("div", { class: "banner banner--advertencia" }, b));
+      dyn.append(h("div", { class: "banner banner--error" }, b));
     }
     for (const a of data.advertencias || []) {
-      dyn.append(h("div", { class: "banner banner--info" }, a));
+      dyn.append(h("div", { class: "banner banner--advertencia" }, a));
     }
     if (maestroPendiente) {
       dyn.append(

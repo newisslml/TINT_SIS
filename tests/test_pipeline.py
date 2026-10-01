@@ -126,11 +126,32 @@ def test_cada_tienda_recibe_solo_sus_productos(tmp_path, entrada):
 
 def test_avisa_productos_que_no_estan_en_la_tabla(tmp_path, entrada):
     summary = run_pipeline(input_dir=entrada, output_dir=tmp_path / "o", db_path=tmp_path / "t.db")
-    avisos = [w for w in summary.ingestion_warnings if "no estan en productos_TINT.xlsx" in w]
+    avisos = [a for a in summary.advertencias if "no estan en productos_TINT.xlsx" in a.texto]
     assert len(avisos) == 1
-    assert "Experto_3_22_09_2026.xlsx" in avisos[0] and "Tecno Const Mate Sipa (1)" in avisos[0]
+    assert "Experto_3_22_09_2026.xlsx: 1 filas de 1 producto(s)" in avisos[0].texto
+    # el detalle nombra a todos los productos, con sus filas
+    assert avisos[0].detalle == ["Esm. al agua / Tecno Const Mate Sipa (1 filas)"]
     # Pajarito esta en la tabla sin tiendas: no genera aviso
     assert not any("Pajarito" in w for w in summary.ingestion_warnings)
+
+
+def test_las_advertencias_quedan_guardadas_con_el_ciclo(tmp_path, entrada):
+    db = tmp_path / "t.db"
+    summary = run_pipeline(input_dir=entrada, output_dir=tmp_path / "o", db_path=db)
+    session = get_session(db)
+    try:
+        guardadas = repository.warnings_for_batch(session, repository.get_last_batch(session))
+    finally:
+        session.close()
+    assert guardadas == [a.to_dict() for a in summary.advertencias] and len(guardadas) == 1
+
+    # un ciclo sin advertencias guarda la lista vacia (no "sin registro")
+    run_pipeline(input_dir=entrada, output_dir=tmp_path / "o", db_path=db, expertos_habilitados={"Experto 1"})
+    session = get_session(db)
+    try:
+        assert repository.warnings_for_batch(session, repository.get_last_batch(session)) == []
+    finally:
+        session.close()
 
 
 def test_falta_un_experto_se_omiten_solo_sus_softwares(tmp_path, entrada):
@@ -143,6 +164,22 @@ def test_falta_un_experto_se_omiten_solo_sus_softwares(tmp_path, entrada):
     assert softwares == {"Santint", "Corob_Tint", "Tinwise_Lab"}
     aviso = next(w for w in summary.ingestion_warnings if w.startswith("Experto 1"))
     assert ".xls" in aviso and "Color_Pro3.1.1" in aviso
+    # queda marcado como experto que no se pudo usar (la app lo notifica aparte)
+    assert [a.texto for a in summary.expertos_omitidos] == [aviso]
+
+
+def test_experto_faltante_queda_guardado_con_su_tipo(tmp_path, entrada):
+    (entrada / "Experto_2_15_09_2026.xlsm").unlink()
+    db = tmp_path / "t.db"
+    summary = run_pipeline(input_dir=entrada, output_dir=tmp_path / "o", db_path=db)
+    [faltante] = summary.expertos_omitidos
+    assert faltante.texto.startswith("Falta Experto 2") and "Tinwise_Lab" in faltante.texto
+    session = get_session(db)
+    try:
+        guardadas = repository.warnings_for_batch(session, repository.get_last_batch(session))
+    finally:
+        session.close()
+    assert {"texto": faltante.texto, "detalle": [], "tipo": "experto"} in guardadas
 
 
 def test_usa_el_experto_de_fecha_mas_nueva(tmp_path, entrada):

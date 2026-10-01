@@ -21,7 +21,7 @@ from tint_sis.preparar import DecisionNuevo, ultimo_resumen
 from tint_sis.preview import preview_batch
 from tint_sis.routing import EXPERT_MASTER_GLOB, find_latest_expert
 
-from . import _preparar, _runner
+from . import _avisos, _preparar, _runner
 
 # Donde se guardan los archivos maestros que se arrastran a "Nuevo ciclo"
 # (<data>/maestros, hermana de la carpeta de entrada): no van a la entrada, que
@@ -101,8 +101,9 @@ def _salida_de_registro(reg, filtrados_dirname: str, vigente: bool = True) -> tu
 
 
 def _last_batch_files(cfg: AppConfig):
-    """(fecha, grupos_dict, n_archivos, filas_totales) del ultimo batch en la DB,
-    o None si no hay ninguno. `grupos` va por software."""
+    """(fecha, grupos_dict, n_archivos, filas_totales, advertencias) del ultimo
+    batch en la DB, o None si no hay ninguno. `grupos` va por software;
+    `advertencias` es None en los ciclos de antes de que se guardaran."""
     session = get_session(cfg.db_path)
     try:
         batch = repository.get_last_batch(session)
@@ -120,9 +121,15 @@ def _last_batch_files(cfg: AppConfig):
             "grupos": grupos,
             "n_archivos": len(registros),
             "filas_totales": _fmt_int(filas_totales),
+            "advertencias": repository.warnings_for_batch(session, batch),
         }
     finally:
         session.close()
+
+
+def _n_advertencias(advertencias: list | None):
+    """Cantidad para mostrar: "-" si el ciclo es de antes de que se guardaran."""
+    return "-" if advertencias is None else len(advertencias)
 
 
 # --------------------------------------------------------------------------- #
@@ -146,14 +153,14 @@ def get_inicio() -> dict:
     last = _last_batch_files(cfg)
     prev = preview_batch(cfg)
 
-    alertas = [
-        {"nivel": "advertencia", "texto": b}
-        for b in prev.bloqueantes + prev.advertencias
+    # rojo lo que impide ejecutar, naranjo lo que queda afuera
+    alertas = [{"nivel": "error", "texto": b} for b in prev.bloqueantes] + [
+        {"nivel": "advertencia", "texto": a} for a in prev.advertencias
     ]
 
     mem = _runner.last_summary()
     advertencias = (
-        mem["resumen"]["advertencias"] if mem else (0 if last is None else "-")
+        mem["resumen"]["advertencias"] if mem else (0 if last is None else _n_advertencias(last["advertencias"]))
     )
 
     return {
@@ -171,6 +178,13 @@ def get_inicio() -> dict:
 @router.get("/preview")
 def get_preview() -> dict:
     return preview_batch(_cfg()).to_dict()
+
+
+@router.get("/avisos")
+def get_avisos(desde: int = -1) -> dict:
+    """Avisos de fin de trabajo (preparacion, ciclo) posteriores al id `desde`;
+    con -1 solo el ultimo id. La UI los consulta seguido desde cualquier vista."""
+    return _avisos.desde(desde)
 
 
 @router.post("/run")
@@ -211,10 +225,11 @@ def get_resultados() -> dict:
         "resumen": {
             "archivos": last["n_archivos"],
             "filas_totales": last["filas_totales"],
-            "advertencias": "-",
+            "advertencias": _n_advertencias(last["advertencias"]),
         },
         "grupos": [{"titulo": software, "salidas": s} for software, s in last["grupos"].items()],
-        "advertencias": [],
+        "advertencias": last["advertencias"] or [],
+        "fecha": last["fecha"],
     }
 
 
@@ -253,11 +268,14 @@ def get_historial() -> dict:
             # carpeta local del backup: la del primer archivo que aún existe, o la
             # esperada (la del primer registro) si ninguno sigue en disco
             carpeta = carpeta_viva or (carpetas[0] if carpetas else None)
+            advertencias = repository.warnings_for_batch(session, batch)
             ciclos.append(
                 {
                     "id": batch.id,
                     "fecha": _fmt_dt(batch.creado_en, FMT_FECHA_HISTORIAL),
                     "origen": batch.origen_dir,
+                    # None: ciclo de antes de que se guardaran las advertencias
+                    "advertencias": advertencias,
                     "n_archivos": len(registros),
                     "n_disponibles": disponibles,
                     "filas_totales": _fmt_int(filas_totales),

@@ -33,10 +33,12 @@ def _cmd_run(args, cfg) -> None:
         for gf in archivos:
             print(f"    - {gf.ruta}  ({gf.filas:,} filas)".replace(",", "."))
 
-    if summary.ingestion_warnings:
+    if summary.advertencias:
         print("\nAdvertencias:")
-        for w in summary.ingestion_warnings:
-            print(f"  - {w}")
+        for a in summary.advertencias:
+            print(f"  - {a.texto}")
+            for d in a.detalle:
+                print(f"      {d}")
 
 
 def _cmd_productos_init(args, cfg) -> None:

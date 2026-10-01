@@ -8,7 +8,8 @@ que envia tintometria (vista "Preparar experto" y `cli preparar`).
      - la tabla de productos: productos que no estan (se agregan al preparar);
      - los Experto 2/3 anteriores (plantillas): que productos entran y salen.
    Tambien valida que se pueda convertir (formatos con equivalencia a galon,
-   colorantes legibles) y cuenta las formulas duplicadas: filas con la misma
+   colorantes legibles; los 3 expertos van por galon) y cuenta las formulas
+   duplicadas: filas con la misma
    Clasificacion, Producto, Cartilla, Color y Base (maestro.CLAVE_FORMULA) que
    una anterior, aunque cambien RGB, notas, formato o colorantes. Se deja la
    primera (Texturex llego con sus 4.775 formulas copiadas 6 veces; Construcolor
@@ -19,7 +20,8 @@ que envia tintometria (vista "Preparar experto" y `cli preparar`).
      - agrega esos productos a productos_TINT.xlsx y completa los nombres de
        Experto 2/3 que falten (todos los productos del maestro van a los 3);
      - genera Experto_1/2/3_<DD_MM_YYYY> en la carpeta de entrada: E1 es el
-       maestro (sin las duplicadas); E2 y E3 salen de las reglas de maestro.py
+       maestro (sin las duplicadas y con las formulas que no vienen en galon
+       pasadas a galon, maestro.a_galon); E2 y E3 salen de las reglas de maestro.py
        sobre el libro del ciclo anterior como plantilla (macros, hojas
        auxiliares e IntegrityData se conservan);
      - mueve los expertos y la tabla anteriores a <data>/backups/expertos/<fecha>/;
@@ -46,7 +48,7 @@ from tint_sis import maestro
 from tint_sis.adapters.libro_writer import encabezado as encabezado_libro
 from tint_sis.adapters.libro_writer import reescribir_hoja
 from tint_sis.adapters.productos import FilaTabla, ProductoAgregado, actualizar_tabla, leer_filas_tabla
-from tint_sis.adapters.sheet_filter import FormatoExpertoError, contar_valores, quitar_filas_repetidas
+from tint_sis.adapters.sheet_filter import FormatoExpertoError, contar_valores, copiar_formulas
 from tint_sis.backups import FORMATO_CARPETA, carpeta_backups
 from tint_sis.config import AppConfig
 from tint_sis.expertos import EXPERTOS, KEY_SEP, normalizar
@@ -216,6 +218,7 @@ class Analisis:
     bloqueantes: list[str]
     puede_preparar: bool = False
     repetidas_e3: int = 0  # ademas de `repetidas`, las que no van a Experto 3 (sin cartilla)
+    filas_a_galon: int = 0  # formulas (sin las duplicadas) que no vienen en galon y se convierten
     # lo que necesita preparar_expertos (no va a la UI)
     _nombres: dict = field(default_factory=dict, repr=False)  # clave -> maestro.NombresProducto
     _completar: dict = field(default_factory=dict, repr=False)  # fila de la tabla -> experto -> nombre
@@ -257,13 +260,13 @@ class _Lectura:
     ejemplos_ilegibles: list[str]
     max_colorantes: int
     duplicados: list[Duplicada] = field(default_factory=list)
+    a_galon: int = 0  # filas que quedan (sin duplicadas) en un formato que no es galon
 
 
-def _colorantes(cols: maestro.Columnas, fila: list) -> tuple:
+def _colorantes(cols: maestro.Columnas, fila: list, galones: float | None) -> tuple:
     """Colorantes de la fila por galon, para ver si dos duplicadas traen la misma
     formula (texto crudo si alguno no se puede leer o el formato no se conoce)."""
     celdas = cols.celdas_colorante(fila)
-    galones = maestro.galones(cols.valor(fila, "formato"))
     if galones is not None:
         try:
             return tuple(sorted(maestro.colorantes_por_galon(celdas, galones)))
@@ -306,9 +309,14 @@ def _leer(path: Path, on_progress: ProgressCallback | None, etapa: str, pct: tup
         p.clasificaciones[str(cols.valor(fila, "clasificacion") or "").strip()] += 1
         formato = str(cols.valor(fila, "formato") or "").strip()
         p.formatos[formato] += 1
+        f = lectura.formatos.get(formato)
+        if f is None:
+            galones, deducido = maestro.equivalencia(formato)
+            f = lectura.formatos[formato] = {"filas": 0, "galones": galones, "deducido": deducido}
+        f["filas"] += 1
         p.cartillas[str(cols.valor(fila, "cartilla") or "").strip()] += 1
         cartilla = str(cols.valor(fila, "cartilla") or "").strip()
-        colorantes = _colorantes(cols, fila)
+        colorantes = _colorantes(cols, fila, f["galones"])
         formula = cols.clave_formula(fila)
         formula_e3 = cols.clave_formula(fila, maestro.CLAVE_FORMULA_E3)
         primera = vistas.get(formula)
@@ -317,6 +325,8 @@ def _leer(path: Path, on_progress: ProgressCallback | None, etapa: str, pct: tup
         if primera is None:
             vistas[formula] = (n, colorantes)
             lectura.contenido[clave][_crudo(fila)] += 1  # solo lo que se entrega
+            if f["galones"] not in (None, 1):
+                lectura.a_galon += 1
             if primera_e3 is None:
                 vistas_e3[formula_e3] = (n, colorantes, cartilla)
             else:  # el mismo color en otra cartilla: no va a Experto 3
@@ -344,8 +354,6 @@ def _leer(path: Path, on_progress: ProgressCallback | None, etapa: str, pct: tup
                     cartilla_conservada=primera_e3[2] if solo_e3 else cartilla,
                 )
             )
-        f = lectura.formatos.setdefault(formato, {"filas": 0, "galones": maestro.galones(formato)})
-        f["filas"] += 1
         usados = 0
         for celda in cols.celdas_colorante(fila):
             try:
@@ -394,8 +402,9 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
     sin_equivalencia = [f"'{f}' ({_miles(d['filas'])} formulas)" for f, d in lec.formatos.items() if d["galones"] is None]
     if sin_equivalencia:
         bloqueantes.append(
-            "Formato sin equivalencia a galón: " + ", ".join(sin_equivalencia)
-            + ". Hay que agregarlo en maestro.FORMATOS_GALONES antes de preparar."
+            "Formato sin equivalencia a galón (el nombre no dice cuántos galones o litros trae): "
+            + ", ".join(sin_equivalencia)
+            + ". Pedir a tintometría el formato correcto o agregarlo en maestro.FORMATOS_GALONES antes de preparar."
         )
     if lec.ilegibles:
         bloqueantes.append(
@@ -404,9 +413,14 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
         )
     for f, d in lec.formatos.items():
         if d["galones"] not in (None, 1):
+            deducido = (
+                f" La equivalencia ({d['galones']:g} galones) sale del nombre del formato: revisarla."
+                if d["deducido"] else ""
+            )
             advertencias.append(
-                f"Formato '{f}' ({_miles(d['filas'])} formulas): en Experto 2 y 3 las cantidades se dividen "
-                f"por {d['galones']:g} para llevarlas a galón (Experto 1 queda tal cual)"
+                f"Formato '{f}' ({_miles(d['filas'])} formulas): se pasa a galón en los 3 expertos, con las "
+                f"cantidades divididas por {d['galones']:g} (en Experto 1 queda como Formato 'Galon', con Oz base "
+                f"y colorantes por galón).{deducido}"
             )
     for p in productos.values():
         if p.repetidas:
@@ -653,6 +667,7 @@ def analizar_maestro(path: Path, cfg: AppConfig, *, on_progress: ProgressCallbac
         bloqueantes=bloqueantes,
         puede_preparar=not bloqueantes,
         repetidas_e3=repetidas_e3,
+        filas_a_galon=lec.a_galon,
         _nombres=nombres,
         _completar=completar,
         _plantillas=plantillas,
@@ -808,23 +823,44 @@ def preparar_expertos(
         maestro_path = Path(analisis.ruta_maestro)
         destino_e1 = staging / planes[E1].archivo
         _emit(on_progress, fase="etapa", etapa=f"Experto 1: {destino_e1.name}", pct=2)
-        if analisis.repetidas:
+        if analisis.repetidas or analisis.filas_a_galon:
+            tareas = (["quitando fórmulas duplicadas"] if analisis.repetidas else []) + (
+                ["pasando a galón"] if analisis.filas_a_galon else []
+            )
+            etapa_e1 = "Experto 1: " + " y ".join(tareas)
 
             def prog_e1(ev: dict) -> None:
                 total = ev.get("total") or 0
                 frac = min(1.0, (ev.get("leidas") or 0) / total) if total else 1.0
-                _emit(on_progress, fase="progreso", etapa="Experto 1: quitando fórmulas duplicadas", pct=2 + int(frac * 13))
+                _emit(on_progress, fase="progreso", etapa=etapa_e1, pct=2 + int(frac * 13))
 
-            _, quitadas = quitar_filas_repetidas(
+            cambiar = None
+            if analisis.filas_a_galon:
+                cols = maestro.Columnas.desde_encabezado(encabezado_libro(maestro_path), maestro_path.name)
+
+                def cambiar(fila: list) -> dict:
+                    return maestro.a_galon(cols, fila)
+
+            copia = copiar_formulas(
                 maestro_path,
                 destino_e1,
                 clave=[maestro.COLUMNAS[c] for c in maestro.CLAVE_FORMULA],
+                cambiar=cambiar,
                 on_progress=prog_e1 if on_progress else None,
             )
-            advertencias.append(
-                f"Experto 1: se quitaron {_miles(quitadas)} formulas duplicadas del maestro "
-                "(misma Clasificacion, Producto, Cartilla, Color y Base)"
-            )
+            if copia.quitadas:
+                advertencias.append(
+                    f"Experto 1: se quitaron {_miles(copia.quitadas)} formulas duplicadas del maestro "
+                    "(misma Clasificacion, Producto, Cartilla, Color y Base)"
+                )
+            if copia.cambiadas:
+                formatos = ", ".join(
+                    f"'{f}' ÷ {d['galones']:g}" for f, d in analisis.formatos.items() if d["galones"] not in (None, 1)
+                )
+                advertencias.append(
+                    f"Experto 1: {_miles(copia.cambiadas)} formulas pasadas a galón ({formatos}): Formato 'Galon' "
+                    "y Oz base y colorantes por galón"
+                )
         else:
             shutil.copyfile(maestro_path, destino_e1)
         generados[E1] = (destino_e1, analisis.filas_unicas)
@@ -1003,6 +1039,7 @@ def escribir_resumen(destino: Path, analisis: Analisis, resultado: ResultadoPrep
         ("Experto 1 anterior", analisis.anterior or "-"),
         ("Fórmulas en el maestro", analisis.filas),
         ("Fórmulas duplicadas quitadas", analisis.repetidas),
+        ("Fórmulas pasadas a galón", analisis.filas_a_galon),
         ("Fórmulas en Experto 1 y 2", analisis.filas_unicas),
         ("Mismo color en otra cartilla (no van a Experto 3)", analisis.repetidas_e3),
         ("Fórmulas en Experto 3", analisis.filas_unicas - analisis.repetidas_e3),

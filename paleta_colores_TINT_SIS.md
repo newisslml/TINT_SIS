@@ -34,7 +34,8 @@ La base viene de la hoja de estilos de [codelpa.cl](https://www.codelpa.cl/). Lo
 | OK / correcto | `#1E8449` | `#E3F4EA` |
 | Falta / error | `#C0392B` | `#FBE7E5` |
 | Informativo | `#005DB9` | `#E4EEF9` |
-| Revisar / advertencia | `#7A5200` | `#FFF3D6` |
+| Advertencia (app desde 0.4.0: naranjo fuerte; borde `#EA580C`, relleno `#C2410C`) | `#9A3412` | `#FFEDD5` |
+| Revisar / advertencia (manual 0.2.0) | `#7A5200` | `#FFF3D6` |
 
 ## Colores por experto
 

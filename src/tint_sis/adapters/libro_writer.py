@@ -37,6 +37,7 @@ from tint_sis.adapters.sheet_filter import (
     _ROW_R_RE,
     HOJA_FORMULAS,
     FormatoExpertoError,
+    Valor,
     _ajustar_workbook,
     _celdas,
     _col_indice,
@@ -46,18 +47,15 @@ from tint_sis.adapters.sheet_filter import (
     _estructura,
     _leer_shared_strings,
     _LectorHoja,
+    _numero,
+    _sst_con_nuevos,
+    _t,
     _valor,
 )
 
-Valor = str | int | float | None
 ProgressCallback = Callable[[dict], None]
 
 _ATTR_S_RE = re.compile(rb'\bs="(\d+)"')
-_SST_RAIZ_RE = re.compile(rb"<((?:[\w.-]+:)?)sst\b[^>]*?(/?)>")
-_COUNT_RE = re.compile(rb'(\bcount=")(\d+)(")')
-_UNIQUE_RE = re.compile(rb'(\buniqueCount=")(\d+)(")')
-# caracteres que XML 1.0 no admite: Excel los guarda como _xHHHH_
-_INVALIDOS_XML_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
 @dataclass
@@ -85,50 +83,6 @@ def encabezado(libro: Path, hoja: str = HOJA_FORMULAS) -> list[str | None]:
         valores[_col_indice(col)] = _valor(attrs, contenido, sst)
     n = max(valores) + 1 if valores else 0
     return [valores.get(i) for i in range(n)]
-
-
-def _numero(valor: int | float) -> bytes:
-    if isinstance(valor, bool):
-        return b"1" if valor else b"0"
-    if isinstance(valor, float) and valor.is_integer() and abs(valor) < 1e15:
-        return str(int(valor)).encode()
-    return repr(valor).encode()
-
-
-def _escapar(texto: str) -> str:
-    texto = texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return _INVALIDOS_XML_RE.sub(lambda m: f"_x{ord(m.group(0)):04X}_", texto)
-
-
-def _t(prefijo: bytes, texto: str) -> bytes:
-    t = prefijo + b"t"
-    espacio = b' xml:space="preserve"' if texto != texto.strip() or "\n" in texto or "\t" in texto else b""
-    return b"<" + t + espacio + b">" + _escapar(texto).encode("utf-8") + b"</" + t + b">"
-
-
-def _si(prefijo: bytes, texto: str) -> bytes:
-    return b"<" + prefijo + b"si>" + _t(prefijo, texto) + b"</" + prefijo + b"si>"
-
-
-def _sst_con_nuevos(xml: bytes, nuevos: list[str], unicos: int, delta_refs: int) -> bytes:
-    raiz = _SST_RAIZ_RE.search(xml)
-    if raiz is None:
-        raise FormatoExpertoError("sharedStrings.xml sin elemento <sst>")
-    prefijo = raiz.group(1)
-    extra = b"".join(_si(prefijo, t) for t in nuevos)
-    if raiz.group(2) == b"/":  # <sst .../> vacio
-        apertura = raiz.group(0)[:-2] + b">"
-        xml = xml[: raiz.start()] + apertura + extra + b"</" + prefijo + b"sst>" + xml[raiz.end() :]
-    elif extra:
-        cierre = xml.rfind(b"</" + prefijo + b"sst>")
-        xml = xml[:cierre] + extra + xml[cierre:]
-    raiz = _SST_RAIZ_RE.search(xml)
-    apertura = raiz.group(0)
-    apertura = _UNIQUE_RE.sub(lambda m: m.group(1) + str(unicos).encode() + m.group(3), apertura, count=1)
-    apertura = _COUNT_RE.sub(
-        lambda m: m.group(1) + str(max(0, int(m.group(2)) + delta_refs)).encode() + m.group(3), apertura, count=1
-    )
-    return xml[: raiz.start()] + apertura + xml[raiz.end() :]
 
 
 def reescribir_hoja(

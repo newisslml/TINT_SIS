@@ -59,6 +59,15 @@ _R_NUM_RE = re.compile(rb'(<(?:[\w.-]+:)?(?:row|c)\b[^>]*?\br="[A-Z]*)\d+(")')
 _DIM_RE = re.compile(rb'(<(?:[\w.-]+:)?dimension\b[^>]*?\bref="[A-Z]+\d+:[A-Z]+)(\d+)(")')
 _AUTOFILTER_RE = re.compile(rb'(<(?:[\w.-]+:)?autoFilter\b[^>]*?\bref="[A-Z]+\d+:[A-Z]+)(\d+)(")')
 _DEFINED_NAME_RE = re.compile(rb"(<definedName\b([^>]*)>)([^<]*)(</definedName>)")
+_CELL_PFX_RE = re.compile(rb"<((?:[\w.-]+:)?)c\b")
+_ATTR_T_COMPLETO_RE = re.compile(rb'\s*\bt="\w+"')
+_SST_RAIZ_RE = re.compile(rb"<((?:[\w.-]+:)?)sst\b[^>]*?(/?)>")
+_COUNT_RE = re.compile(rb'(\bcount=")(\d+)(")')
+_UNIQUE_RE = re.compile(rb'(\buniqueCount=")(\d+)(")')
+# caracteres que XML 1.0 no admite: Excel los guarda como _xHHHH_
+_INVALIDOS_XML_RE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+Valor = str | int | float | None
 
 
 class FormatoExpertoError(ValueError):
@@ -295,6 +304,15 @@ def _valor(attrs: bytes, contenido: bytes | None, sst: list[str]) -> str | None:
     return html.unescape(crudo)
 
 
+def _valores_fila(fila: bytes, sst: list[str]) -> list[str | None]:
+    """Valores de todas las celdas de la fila, por posicion de columna."""
+    valores: dict[int, str | None] = {}
+    for col, attrs, contenido in _celdas(fila):
+        valores[_col_indice(col)] = _valor(attrs, contenido, sst)
+    ancho = max(valores) + 1 if valores else 0
+    return [valores.get(i) for i in range(ancho)]
+
+
 def _encabezados(fila: bytes, sst: list[str]) -> dict[str, bytes]:
     """encabezado normalizado -> letra de columna (primera aparicion)."""
     out: dict[str, bytes] = {}
@@ -346,6 +364,110 @@ def _quitar_formulas(fila: bytes) -> bytes:
 # --------------------------------------------------------------------------- #
 # escritura
 # --------------------------------------------------------------------------- #
+def _numero(valor: int | float) -> bytes:
+    if isinstance(valor, bool):
+        return b"1" if valor else b"0"
+    if isinstance(valor, float) and valor.is_integer() and abs(valor) < 1e15:
+        return str(int(valor)).encode()
+    return repr(valor).encode()
+
+
+def _escapar(texto: str) -> str:
+    texto = texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return _INVALIDOS_XML_RE.sub(lambda m: f"_x{ord(m.group(0)):04X}_", texto)
+
+
+def _t(prefijo: bytes, texto: str) -> bytes:
+    t = prefijo + b"t"
+    espacio = b' xml:space="preserve"' if texto != texto.strip() or "\n" in texto or "\t" in texto else b""
+    return b"<" + t + espacio + b">" + _escapar(texto).encode("utf-8") + b"</" + t + b">"
+
+
+def _si(prefijo: bytes, texto: str) -> bytes:
+    return b"<" + prefijo + b"si>" + _t(prefijo, texto) + b"</" + prefijo + b"si>"
+
+
+def _sst_con_nuevos(xml: bytes, nuevos: list[str], unicos: int, delta_refs: int) -> bytes:
+    """sharedStrings.xml con `nuevos` agregados al final y count/uniqueCount al dia."""
+    raiz = _SST_RAIZ_RE.search(xml)
+    if raiz is None:
+        raise FormatoExpertoError("sharedStrings.xml sin elemento <sst>")
+    prefijo = raiz.group(1)
+    extra = b"".join(_si(prefijo, t) for t in nuevos)
+    if raiz.group(2) == b"/":  # <sst .../> vacio
+        apertura = raiz.group(0)[:-2] + b">"
+        xml = xml[: raiz.start()] + apertura + extra + b"</" + prefijo + b"sst>" + xml[raiz.end() :]
+    elif extra:
+        cierre = xml.rfind(b"</" + prefijo + b"sst>")
+        xml = xml[:cierre] + extra + xml[cierre:]
+    raiz = _SST_RAIZ_RE.search(xml)
+    apertura = raiz.group(0)
+    apertura = _UNIQUE_RE.sub(lambda m: m.group(1) + str(unicos).encode() + m.group(3), apertura, count=1)
+    apertura = _COUNT_RE.sub(
+        lambda m: m.group(1) + str(max(0, int(m.group(2)) + delta_refs)).encode() + m.group(3), apertura, count=1
+    )
+    return xml[: raiz.start()] + apertura + xml[raiz.end() :]
+
+
+class _Textos:
+    """Textos de sharedStrings para escribir celdas nuevas: se reutiliza el indice
+    de un texto que ya existe y los nuevos se agregan al final (las otras hojas
+    siguen apuntando a los mismos indices)."""
+
+    def __init__(self, textos: list[str]):
+        self.existentes = len(textos)
+        self.indice: dict[str, int] = {}
+        for i, t in enumerate(textos):
+            self.indice.setdefault(t, i)
+        self.nuevos: list[str] = []
+        self.delta_refs = 0  # referencias t="s" agregadas (o quitadas, si es negativo)
+
+    def de(self, texto: str) -> int:
+        idx = self.indice.get(texto)
+        if idx is None:
+            idx = self.indice[texto] = self.existentes + len(self.nuevos)
+            self.nuevos.append(texto)
+        return idx
+
+    def xml(self, original: bytes) -> bytes:
+        return _sst_con_nuevos(original, self.nuevos, self.existentes + len(self.nuevos), self.delta_refs)
+
+
+def _cambiar_celdas(fila: bytes, cambios: Mapping[int, Valor], textos: _Textos | None) -> bytes:
+    """`fila` con el valor de algunas de sus celdas reemplazado (indice de
+    columna -> valor nuevo; None deja la celda vacia). Cada celda conserva su
+    referencia y su estilo; los textos van a sharedStrings (`textos`) o, si el
+    libro no tiene, como inlineStr. Las columnas sin celda en la fila no se
+    tocan."""
+    siguiente = 0
+
+    def celda(m: re.Match) -> bytes:
+        nonlocal siguiente
+        attrs = m.group(1)
+        r = _ATTR_R_RE.search(attrs)
+        idx = _col_indice(r.group(1)) if r else siguiente
+        siguiente = idx + 1
+        if idx not in cambios:
+            return m.group(0)
+        valor = cambios[idx]
+        pfx = _CELL_PFX_RE.match(m.group(0)).group(1)
+        t = _ATTR_T_RE.search(attrs)
+        if textos is not None and t and t.group(1) == b"s":
+            textos.delta_refs -= 1
+        base = b"<" + pfx + b"c" + _ATTR_T_COMPLETO_RE.sub(b"", attrs).rstrip()
+        cierre = b"</" + pfx + b"c>"
+        if valor is None or valor == "":
+            return base + b"/>"
+        if isinstance(valor, str) and textos is not None:
+            textos.delta_refs += 1
+            return base + b' t="s"><' + pfx + b"v>" + str(textos.de(valor)).encode() + b"</" + pfx + b"v>" + cierre
+        if isinstance(valor, str):
+            return base + b' t="inlineStr"><' + pfx + b"is>" + _t(pfx, valor) + b"</" + pfx + b"is>" + cierre
+        return base + b"><" + pfx + b"v>" + _numero(valor) + b"</" + pfx + b"v>" + cierre
+
+    return _CELL_RE.sub(celda, fila)
+
+
 def _ajustar_workbook(xml: bytes, sheet_idx: int, ultima_fila: int) -> bytes:
     def dn(m: re.Match) -> bytes:
         attrs = m.group(2)
@@ -562,11 +684,7 @@ def iterar_filas(
             dim = _DIM_RE.search(lector.prefijo)
             total = int(dim.group(2)) - 1 if dim else None
             for n, fila in enumerate(lector.filas()):
-                valores: dict[int, str | None] = {}
-                for col, attrs, contenido in _celdas(fila):
-                    valores[_col_indice(col)] = _valor(attrs, contenido, sst)
-                ancho = max(valores) + 1 if valores else 0
-                yield [valores.get(i) for i in range(ancho)]
+                yield _valores_fila(fila, sst)
                 if on_progress is not None and n and n % progress_every == 0:
                     on_progress({"leidas": n, "total": total})
 
@@ -599,6 +717,13 @@ def contar_valores(src: Path, headers: Sequence[str], *, hoja: str = HOJA_FORMUL
     return conteo
 
 
+@dataclass
+class ResultadoCopia:
+    leidas: int = 0
+    quitadas: int = 0  # filas repetidas que no pasaron
+    cambiadas: int = 0  # filas a las que `cambiar` les modifico alguna celda
+
+
 def quitar_filas_repetidas(
     src: Path,
     destino: Path,
@@ -608,12 +733,31 @@ def quitar_filas_repetidas(
     on_progress: ProgressCallback | None = None,
     progress_every: int = 5000,
 ) -> tuple[int, int]:
+    """`copiar_formulas` sin cambiar celdas. Devuelve (leidas, quitadas)."""
+    r = copiar_formulas(src, destino, hoja=hoja, clave=clave, on_progress=on_progress, progress_every=progress_every)
+    return r.leidas, r.quitadas
+
+
+def copiar_formulas(
+    src: Path,
+    destino: Path,
+    *,
+    hoja: str = HOJA_FORMULAS,
+    clave: Sequence[str] | None = None,
+    cambiar: Callable[[list[str | None]], Mapping[int, Valor] | None] | None = None,
+    on_progress: ProgressCallback | None = None,
+    progress_every: int = 5000,
+) -> ResultadoCopia:
     """Copia `src` en `destino` dejando solo la primera de las filas de datos de
     la hoja de formulas que se repiten; las que quedan se renumeran. Sin `clave`
     se repite la fila identica en todas las columnas; con `clave` (encabezados)
     la que tiene los mismos valores en esas columnas, comparados con
-    `normalizar` (una fila con esas columnas vacias se deja siempre). Devuelve
-    (leidas, quitadas)."""
+    `normalizar` (una fila con esas columnas vacias se deja siempre).
+
+    `cambiar`, si se pasa, recibe los valores de cada fila que queda (texto
+    crudo por posicion de columna, como `iterar_filas`) y devuelve las celdas a
+    reemplazar {indice de columna: valor} (ver `_cambiar_celdas`); los textos
+    nuevos se agregan a sharedStrings. El resto del libro se copia tal cual."""
     src, destino = Path(src), Path(destino)
     tmp_dir = Path(tempfile.mkdtemp(prefix="tint_repetidas_"))
     try:
@@ -621,8 +765,9 @@ def quitar_filas_repetidas(
             libro = _estructura(z)
             sheet_idx, sheet_name, sheet_part = _elegir_hoja(libro, hoja)
             sst = _leer_shared_strings(z, libro.shared_strings_part)
+            textos = _Textos(sst) if cambiar is not None and libro.shared_strings_part else None
             filas_tmp = tmp_dir / "filas.rows"
-            leidas = quitadas = 0
+            resultado = ResultadoCopia()
             hubo_formulas = False
             vistas: set[tuple] = set()
             with z.open(sheet_part) as f, open(filas_tmp, "wb", buffering=_CHUNK) as out:
@@ -647,7 +792,7 @@ def quitar_filas_repetidas(
                     cols_clave = {headers[normalizar(h)]: i for i, h in enumerate(clave)}
                 siguiente = fila_enc + 1
                 for fila in filas_iter:
-                    leidas += 1
+                    resultado.leidas += 1
                     if cols_clave is None:
                         huella: tuple | None = tuple(
                             (col, _valor(attrs, contenido, sst))
@@ -659,17 +804,22 @@ def quitar_filas_repetidas(
                         if not any(huella):
                             huella = None
                     if huella is not None and huella in vistas:
-                        quitadas += 1
+                        resultado.quitadas += 1
                     else:
                         if huella is not None:
                             vistas.add(huella)
                         if (b"<f" in fila or b":f" in fila) and _F_RE.search(fila):
                             fila = _quitar_formulas(fila)
                             hubo_formulas = True
+                        if cambiar is not None:
+                            cambios = cambiar(_valores_fila(fila, sst))
+                            if cambios:
+                                fila = _cambiar_celdas(fila, cambios, textos)
+                                resultado.cambiadas += 1
                         out.write(_R_NUM_RE.sub(b"\\g<1>" + str(siguiente).encode() + b"\\g<2>", fila))
                         siguiente += 1
-                    if on_progress is not None and leidas % progress_every == 0:
-                        on_progress({"leidas": leidas, "total": total})
+                    if on_progress is not None and resultado.leidas % progress_every == 0:
+                        on_progress({"leidas": resultado.leidas, "total": total})
                 prefijo, sufijo = lector.prefijo, lector.sufijo
 
             if on_progress is not None:
@@ -680,9 +830,11 @@ def quitar_filas_repetidas(
             suf = _AUTOFILTER_RE.sub(rb"\g<1>" + num + rb"\g<3>", sufijo, count=1)
             reemplazos = _sin_calc_chain(z, libro) if hubo_formulas else {}
             reemplazos[libro.workbook_part] = _ajustar_workbook(z.read(libro.workbook_part), sheet_idx, ultima)
+            if textos is not None and (textos.nuevos or textos.delta_refs):
+                reemplazos[libro.shared_strings_part] = textos.xml(z.read(libro.shared_strings_part))
             destino.parent.mkdir(parents=True, exist_ok=True)
             _escribir_libro(z, destino, sheet_part, cabeza, filas_tmp, suf, reemplazos)
-        return leidas, quitadas
+        return resultado
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
